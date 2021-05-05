@@ -1,4 +1,4 @@
-## My Project-3
+## ETL Pipeline Orchestration by AWS Step Functions
 
 TODO: Fill this README out!
 

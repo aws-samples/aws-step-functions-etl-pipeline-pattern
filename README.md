@@ -86,7 +86,7 @@ Follow the below step to deploy this pattern using CloudFormation template
 1.	Clone the Repo
 2.	Navigate to the Directory
 3.	Update parameter.json file as follows - 
-    - pS3BucketNamen - Unique bucket name. This bucket will be created to store all the dataset. As, S3 Bucket name is globally unique, provide a unique name.
+    - pS3BucketName - Unique bucket name. This bucket will be created to store all the dataset. As, S3 Bucket name is globally unique, provide a unique name.
     - pEmailforNotification - A valid email address to receive success/error notification.
     - pSourceFolder - Folder name (inside bucket created mentioned in 3.a) where source csv file will be uploaded inside 
     - pStageFolder - Folder name (inside bucket created mentioned in 3.a) used to staging area for AWS Glue Jobs 
@@ -104,7 +104,7 @@ Follow the below step to deploy this pattern using CloudFormation template
     *aws cloudformation package --template-file template.yml --s3-bucket <**existing_bucket_name_in_the_same_region**> --output-template-file packaged.template --profile <**Profile_Name**>*
 
     *aws cloudformation deploy --stack-name <**Stack_Name**> --template-file packaged.template  --parameter-overrides file://parameter.json --capabilities CAPABILITY_IAM --profile <**Profile_Name**>*
-7.	Check the progress of CloudFormation stack deployment in console and wait for it to finish
+5.	Check the progress of CloudFormation stack deployment in console and wait for it to finish
 
 
 ## Test

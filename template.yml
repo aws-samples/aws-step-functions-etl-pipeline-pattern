@@ -1,0 +1,876 @@
+Transform: AWS::Serverless-2016-10-31
+
+Description: "This is a template to create ETL pipeline pattern with AWS Step Functions"
+
+Parameters: 
+
+  pS3BucketName:
+    Type: String
+    Description: "S3 bucket to create."
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9_-]*"
+
+  pDirsToCreate:
+    Description: "Comma delimited list of directories to create."
+    Type: CommaDelimitedList
+    Default: "source,archive,error,stage,transform"
+
+  pStageFolder:
+    Type: String
+    Description: Souce File Path
+    Default: "stage"
+
+  pTransformFolder:
+    Type: String
+    Description: Souce File Path
+    Default: "transform"
+
+  pArchiveFolder:
+    Type: String
+    Description: Souce File Path
+    Default: "archive"
+
+  pErrorFolder:
+    Type: String
+    Description: Souce File Path
+    Default: "error"
+
+  pSourceFolder:
+    Type: String
+    Description: Souce File Path
+    Default: "source"
+
+  pDatasetSchema:
+    Type: String
+    Description: Expected Schema for the source DatasetSchema
+
+  pEmailforNotification:
+    Type: String
+
+Resources:
+
+  LambdaLayerParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub ${AWS::StackName}_lambda_layer
+      Type: String
+      Value: "NA"
+
+  S3CustomResource:
+    Type: Custom::S3CustomResource
+    Properties:
+      ServiceToken: !GetAtt LambdaFunctionS3Object.Arn
+      the_bucket: !Ref S3Bucket
+      #dirs_to_create: !Ref pDirsToCreate
+      dirs_to_create: !Join [ ",", [!Ref pSourceFolder,!Ref pStageFolder,!Ref pErrorFolder,!Ref pArchiveFolder,!Ref pTransformFolder]
+
+      file_prefix: "glue/gluejob.py"
+      file_content: !Sub |
+        import sys
+        from awsglue.transforms import *
+        from awsglue.utils import getResolvedOptions
+        from pyspark.context import SparkContext
+        from awsglue.context import GlueContext
+        from awsglue.job import Job
+
+        args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+
+        sc = SparkContext()
+        glueContext = GlueContext(sc)
+        spark = glueContext.spark_session
+        job = Job(glueContext)
+        job.init(args['JOB_NAME'], args)
+        datasource0 = glueContext.create_dynamic_frame.from_catalog(database = "${GlueDB}", table_name = "${pStageFolder}", transformation_ctx = "datasource0")
+        applymapping1 = ApplyMapping.apply(frame = datasource0, mappings = [("date", "string", "date", "string"), ("description", "string", "description", "string"), ("deposits", "double", "deposits", "double"), ("withdrawls", "double", "withdrawls", "double"), ("balance", "double", "balance", "double"), ("year", "long", "year", "int"), ("month", "long", "month", "int"), ("day", "long", "day", "int")], transformation_ctx = "applymapping1")
+        resolvechoice2 = ResolveChoice.apply(frame = applymapping1, choice = "make_struct", transformation_ctx = "resolvechoice2")
+
+        dropnullfields3 = DropNullFields.apply(frame = resolvechoice2, transformation_ctx = "dropnullfields3")
+
+        datasink4 = glueContext.write_dynamic_frame.from_options(frame = dropnullfields3, connection_type = "s3", format_options = {"compression": "snappy"}, connection_options = {"path": "s3://${pS3BucketName}/${pTransformFolder}","partitionKeys":["year","month","day"]}, format = "glueparquet", transformation_ctx = "datasink4")
+        job.commit()
+
+  S3CustomResourcestepfunction:
+    Type: Custom::S3CustomResource
+    Properties:
+      ServiceToken: !GetAtt LambdaFunctionS3Object.Arn
+      the_bucket: !Ref S3Bucket
+      dirs_to_create: "Step_Function"
+      file_prefix: "step_funciton"
+      file_content: !Sub |
+        import sys
+        from awsglue.transforms import *
+        from awsglue.utils import getResolvedOptions
+        from pyspark.context import SparkContext
+        from awsglue.context import GlueContext
+        from awsglue.job import Job
+
+        args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+
+        sc = SparkContext()
+        glueContext = GlueContext(sc)
+        spark = glueContext.spark_session
+        job = Job(glueContext)
+        job.init(args['JOB_NAME'], args)
+        datasource0 = glueContext.create_dynamic_frame.from_catalog(database = "${GlueDB}", table_name = "${pStageFolder}", transformation_ctx = "datasource0")
+        applymapping1 = ApplyMapping.apply(frame = datasource0, mappings = [("date", "string", "date", "string"), ("description", "string", "description", "string"), ("deposits", "double", "deposits", "double"), ("withdrawls", "double", "withdrawls", "double"), ("balance", "double", "balance", "double"), ("year", "long", "year", "int"), ("month", "long", "month", "int"), ("day", "long", "day", "int")], transformation_ctx = "applymapping1")
+        resolvechoice2 = ResolveChoice.apply(frame = applymapping1, choice = "make_struct", transformation_ctx = "resolvechoice2")
+
+        dropnullfields3 = DropNullFields.apply(frame = resolvechoice2, transformation_ctx = "dropnullfields3")
+
+        datasink4 = glueContext.write_dynamic_frame.from_options(frame = dropnullfields3, connection_type = "s3", format_options = {"compression": "snappy"}, connection_options = {"path": "s3://${pS3BucketName}/${pTransformFolder}","partitionKeys":["year","month","day"]}, format = "glueparquet", transformation_ctx = "datasink4")
+        job.commit()
+
+  StartCodeBuildProject:
+    Type: Custom::StartCodeBuildProject
+    Properties:
+      ServiceToken: !GetAtt StartCodeBuildProjectFunction.Arn
+      Update_lambda_layer: "yes"
+    DependsOn:
+      - "LambdaLayerParameter"
+
+  LambdaFunctionS3Object:
+     Type: AWS::Serverless::Function
+     Properties:
+       Layers: 
+         - !Ref LambdaLayer
+       Description: "Work with S3 Buckets!"
+       Handler: s3object.handler
+       CodeUri: lambda
+       Role: !GetAtt LambdaRole.Arn
+       Timeout: 360
+       Runtime: python3.6
+   
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !Ref pEmailforNotification
+          Protocol: email
+
+  CodeBuildRole: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: "Allow"
+            Principal: 
+              Service: 
+                - "codebuild.amazonaws.com" 
+            Action: 
+              - "sts:AssumeRole"  
+      ManagedPolicyArns:
+          - !Ref BasicManagedPolicyforCodeBuild
+
+  BasicManagedPolicyforCodeBuild: 
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      Description: "THis is sample CFN template"
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Sid: "lambdalayeraccess"
+            Effect: "Allow"
+            Action: 
+              -  "lambda:Publish*"
+              -  "lambda:List*"
+            Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:${AWS::StackName}-pandas-layer"
+
+          - Sid: "logaccess"
+            Effect: "Allow"
+            Action: 
+              -  logs:CreateLogGroup
+              -  logs:CreateLogStream
+              -  logs:PutLogEvents
+            Resource: "*"
+
+          - Sid: "SSMPutparamater"
+            Effect: "Allow"
+            Action:
+              - ssm:PutParameter
+            Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${LambdaLayerParameter}"
+
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Description: Test build to validate the resources created by CFN templates
+      Source:
+        Type: NO_SOURCE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            build:
+              commands:
+                - mkdir -p build/python
+                - echo "pandas==1.2.3" > requirements.txt
+                - echo "numpy==1.20.2" >> requirements.txt
+                - echo "s3fs" >> requirements.txt
+                - echo "pytz" >> requirements.txt
+                - echo "cerberus" >> requirements.txt
+                - pip install -r requirements.txt -t ./build/python
+                - cd ./build && zip -r ../temp.zip .
+                - pwd
+                - ls -l
+                - ls -lrt
+                - cd ..
+                - ls -l
+                - out=$(aws lambda publish-layer-version --layer-name ${LayerName} --zip-file fileb://temp.zip --compatible-runtimes python3.7 python3.8| jq .LayerVersionArn |tr -d "\"")
+                - aws ssm put-parameter  --name ${SSMParameterName} --value ${out} --type "String" --overwrite
+
+      ServiceRole:
+        Fn::GetAtt: [ CodeBuildRole, Arn ]
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:3.0
+        EnvironmentVariables:
+          - Name: LayerName
+            Type: PLAINTEXT
+            Value: !Sub "${AWS::StackName}-pandas-layer"
+          - Name: SSMParameterName
+            Type: PLAINTEXT
+            Value: !Ref LambdaLayerParameter
+
+      TimeoutInMinutes: 30
+
+
+  BasicLambdaRole: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: "Allow"
+            Principal: 
+              Service: 
+                - "lambda.amazonaws.com" 
+            Action: 
+              - "sts:AssumeRole"  
+      ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+          - !Ref BasicManagedPolicyforlambda
+
+  BasicManagedPolicyforlambda: 
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      Description: "THis is sample CFN template"
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Sid: "stepfunction"
+            Effect: "Allow"
+            Action: "states:*"
+            Resource: !Sub ${MyStepFunction}
+
+          - Sid: "s3listaccess"
+            Effect: "Allow"
+            Action: 
+              - "s3:List*"
+            Resource: !Sub "arn:aws:s3:::${pS3BucketName}"
+
+          - Sid: "s3putaccess"
+            Effect: "Allow"
+            Action: 
+              - "s3:Get*"
+              - "s3:Put*"
+              - "s3:Delete*"
+            Resource: !Sub "arn:aws:s3:::${pS3BucketName}/*"
+
+
+  LambdaRole: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: "Allow"
+            Principal: 
+              Service: 
+                - "lambda.amazonaws.com" 
+            Action: 
+              - "sts:AssumeRole"  
+      ManagedPolicyArns:
+          - !Ref ManagedPolicyforlambda
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+      Path: "/"
+
+  StepFunctionRole: 
+    Type: "AWS::IAM::Role"
+    Properties: 
+      AssumeRolePolicyDocument:   
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: "Allow"
+            Principal: 
+              Service: 
+                - "states.amazonaws.com"  
+            Action: 
+              - "sts:AssumeRole"  
+      ManagedPolicyArns:
+          - !Ref ManagedPolicyforstepfunction
+
+  ManagedPolicyforstepfunction: 
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      Description: "THis is sample CFN template"
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Sid: "s3listaccess"
+            Effect: "Allow"
+            Action: "lambda:InvokeFunction"
+            Resource: 
+              - !GetAtt  ArchiveFunction.Arn
+              - !GetAtt  StartCrawlerFunction.Arn
+              - !GetAtt  NotificationFunction.Arn
+              - !GetAtt  CrawlerStatusCheckFunction.Arn
+              - !GetAtt  InputValidationFunction.Arn
+
+          - Sid: "glueaccess"
+            Effect: "Allow"
+            Action: 
+              - "glue:StartJobRun"
+              - "glue:GetJobRun"
+              - "glue:GetJobRuns"
+              - "glue:BatchStopJobRun"
+            Resource: "*"
+
+          - Sid: "xrayaccess"
+            Effect: "Allow"
+            Action:
+              -  "xray:PutTraceSegments"
+              -  "xray:PutTelemetryRecords"
+              -  "xray:GetSamplingRules"
+              -  "xray:GetSamplingTargets"
+            Resource: "*"
+
+  ManagedPolicyforlambda: 
+    Type: "AWS::IAM::ManagedPolicy"
+    Properties:
+      Description: "THis is sample CFN template"
+      PolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Sid: "codebuild"
+            Effect: "Allow"
+            Action: 
+              - "codebuild:StartBuild"
+              - "codebuild:BatchGet*"
+              - "codebuild:List*"
+            Resource: !GetAtt  CodeBuildProject.Arn
+          - Sid: "s3listaccess"
+            Effect: "Allow"
+            Action: 
+              - "s3:List*"
+            Resource: !Sub "arn:aws:s3:::${pS3BucketName}"
+          - Sid: "s3putaccess"
+            Effect: "Allow"
+            Action: 
+              - "s3:Get*"
+              - "s3:Put*"
+              - "s3:Delete*"
+            Resource: !Sub "arn:aws:s3:::${pS3BucketName}/*"
+          - Sid: "SNStopicaccess"
+            Effect: "Allow"
+            Action: "sns:Publish"
+            Resource: !Ref  SNSTopic
+          - Sid: "glue"
+            Effect: "Allow"
+            Action: "glue:*"
+            Resource: 
+                - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${GlueDB}"
+                - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:crawler/${CrawlPartitionedFile}"
+                - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:crawler/${CrawlRawFile}"
+                - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${GlueDB}/*"
+                - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog"
+
+  GlueDB:
+    Type: AWS::Glue::Database
+    Properties: 
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput: 
+        Description: Glue Database
+  S3Bucket:
+    Type: AWS::S3::Bucket    
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      BucketName: !Sub ${pS3BucketName}
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: 's3:ObjectCreated:*'
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: !Sub "${pSourceFolder}/"
+                  - Name: suffix
+                    Value: .csv
+            Function: !GetAtt  StartStepFunction.Arn
+      BucketEncryption: 
+        ServerSideEncryptionConfiguration: 
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+
+  S3InvokeLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      SourceAccount: !Sub ${AWS::AccountId}
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt  StartStepFunction.Arn
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub arn:aws:s3:::${pS3BucketName}
+
+  ArchiveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role: !GetAtt LambdaRole.Arn
+      Handler: move_file.lambda_handler
+      CodeUri: lambda
+      Runtime: python3.7
+      Timeout: 30
+      Environment:
+        Variables:
+          archive_folder_name: !Ref pArchiveFolder
+          error_folder_name: !Ref pErrorFolder
+
+  StartStepFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role: !GetAtt BasicLambdaRole.Arn
+      Handler: start_step_function.lambda_handler
+      CodeUri: lambda
+      Runtime: python3.7
+      Timeout: 60
+      Environment:
+        Variables:
+          STEP_FUNC_ARN: !Ref MyStepFunction
+
+  StartCrawlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role: !GetAtt LambdaRole.Arn
+      Handler: start_crawler.lambda_handler
+      CodeUri: lambda
+      Runtime: python3.7
+      Timeout: 60
+
+  NotificationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role: !GetAtt LambdaRole.Arn
+      Handler: notification.lambda_handler
+      CodeUri: lambda
+      Runtime: python3.7
+      Timeout: 30
+      Environment:
+        Variables:
+          SNS_TOPIC: !Ref SNSTopic
+
+  CrawlerStatusCheckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role: !GetAtt LambdaRole.Arn
+      Handler: check_crawler.lambda_handler
+      CodeUri: lambda
+      Runtime: python3.7
+      Timeout: 30
+      Environment:
+        Variables:
+          RETRYLIMIT: 200
+        
+  InputValidationFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - "StartCodeBuildProject"
+    Properties:
+      Layers: 
+        - !GetAtt LambdaLayerParameter.Value
+      Role: !GetAtt LambdaRole.Arn
+      Handler: validation.lambda_handler
+      CodeUri: lambda
+      Runtime: python3.8
+      Timeout: 500
+      Environment:
+        Variables:
+          stage_folder_name: !Ref pStageFolder
+          source_folder_name: !Ref pSourceFolder
+          schema: !Ref pDatasetSchema
+
+
+  StartCodeBuildProjectFunction:
+    Type: AWS::Serverless::Function
+    Description: "Start Code Build project by lambda function"
+    Properties:
+      Layers: 
+         - !Ref LambdaLayer
+      Role: !GetAtt LambdaRole.Arn
+      Handler: start_codebuild.lambda_handler
+      CodeUri: lambda
+      Runtime: python3.6
+      Timeout: 500
+      Environment:
+        Variables:
+          PROJECT_NAME: !Ref CodeBuildProject
+
+  GlueRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "glue.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        -
+          PolicyName: "root"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: "s3listaccess"
+                Effect: "Allow"
+                Action: 
+                  - "s3:List*"
+                Resource: !Sub "arn:aws:s3:::${pS3BucketName}"
+              - Sid: "s3putaccess"
+                Effect: "Allow"
+                Action: 
+                  - "s3:Get*"
+                  - "s3:Put*"
+                  - "s3:Delete*"
+                Resource: !Sub "arn:aws:s3:::${pS3BucketName}/*"
+              - Sid: "glue"
+                Effect: "Allow"
+                Action: "glue:*"
+                Resource: 
+                    - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${GlueDB}"
+                    - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${GlueDB}/*"
+                    - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog"
+              - Sid: "cwlog"
+                Effect: "Allow"
+                Action: "logs:*"
+                Resource: 
+                    - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws-glue/*"
+
+  MyStepFunction:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      TracingConfiguration: 
+        Enabled: true
+      RoleArn: !GetAtt StepFunctionRole.Arn
+      DefinitionString: !Sub |
+        {
+            "Comment": "A HELLO World example of the Amazon States Language using Pass states...",
+            "StartAt": "Validate input csv",
+            "States": {
+                "Validate input csv": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${InputValidationFunction}",
+                    "Next": "Validation Success?",
+                    "ResultPath": "$.taskresult"
+                },
+                "Validation Success?": {
+                    "Type": "Choice",
+                    "Choices": [
+                        {
+                            "Variable": "$.taskresult.Validation",
+                            "StringEquals": "SUCCESS",
+                            "Next": "Start Crawler For Raw File"
+                        },
+                        {
+                            "Variable": "$.taskresult.Validation",
+                            "StringEquals": "FAILURE",
+                            "Next": "FAIL - Move file to error folder"
+                        }
+                    ]
+                },
+                "FAIL - Move file to error folder": {
+                    "Type": "Task",
+                    "Next": "Error Notification",
+                    "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${ArchiveFunction}"
+                },
+
+                "Error Notification": {
+                      "Type": "Task",
+                      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${NotificationFunction}",
+                      "Parameters": {
+                        "executionname.$": "$$.Execution.Name",
+                        "msg.$": "$.msg",
+                        "status.$": "$.Status"
+                      },
+                      "Next": "Fail"
+                },
+                "Start Crawler For Raw File": {
+                    "Type": "Task",
+                    "ResultPath": "$.taskresult",
+                    "ResultSelector": {
+                        "cnt": "0",
+                        "crawler_name": "${CrawlRawFile}"
+                    },
+                    "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StartCrawlerFunction}",
+                    "Parameters": {
+                        "Crawler_Name": "${CrawlRawFile}"
+                    },
+                    "Retry": [
+                        {
+                            "ErrorEquals": [
+                                "CrawlerRunningException"
+                            ],
+                            "IntervalSeconds": 10,
+                            "MaxAttempts": 10,
+                            "BackoffRate": 2
+                        }
+                    ],
+                    "Catch": [
+                        {
+                            "ErrorEquals": [
+                                "CrawlerRunningException"
+                            ],
+                            "Comment": "Crawler is running for long time",
+                            "Next": "FAIL - Move file to error folder"
+                        },
+                        {
+                            "ErrorEquals": [
+                                "States.ALL"
+                            ],
+                            "Comment": "Error fall back",
+                            "ResultPath": "$.error-info",
+                            "Next": "FAIL - Move file to error folder"
+                        }
+                    ],
+                    "Next": "Raw File Crawler Status Check"
+                },
+                "Raw File Crawler Status Check": {
+                    "Type": "Task",
+                    "InputPath": "$.taskresult",
+                    "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${CrawlerStatusCheckFunction}",
+                    "Next": "Raw File Crawler Finished?",
+                    "ResultPath": "$.taskresult"
+                },
+                "Raw File Crawler Finished?": {
+                    "Type": "Choice",
+                    "Choices": [
+                        {
+                            "Or": [
+                                {
+                                    "Variable": "$.taskresult.Status",
+                                    "StringEquals": "STOPPING"
+                                },
+                                {
+                                    "Variable": "$.taskresult.Status",
+                                    "StringEquals": "RUNNING"
+                                }
+                            ],
+                            "Next": "Raw File Crawler Wait"
+                        },
+                        {
+                            "Variable": "$.taskresult.Status",
+                            "StringEquals": "READY",
+                            "Next": "Run Glue Job"
+                        },
+                        {
+                            "Variable": "$.taskresult.Status",
+                            "StringEquals": "RETRYLIMITREACH",
+                            "Next": "FAIL - Move file to error folder"
+                        },
+                        {
+                            "Variable": "$.taskresult.Status",
+                            "StringEquals": "FAILED",
+                            "Next": "FAIL - Move file to error folder"
+                        }
+                    ],
+                    "Default": "FAIL - Move file to error folder"
+                },
+                "Raw File Crawler Wait": {
+                    "Type": "Wait",
+                    "Seconds": 30,
+                    "Next": "Raw File Crawler Status Check"
+                },
+                "Run Glue Job": {
+                    "Type": "Task",
+                    "Next": "Start Crawler For Partitioned File",
+                    "ResultPath": null,
+                    "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                    "Parameters": {
+                        "JobName": "${GlueJob}"
+                    },
+                "Catch": [
+                        {
+                            "ErrorEquals": [
+                                "States.ALL"
+                            ],
+                            "Comment": "Error fall back for glue job",
+                            "ResultPath": "$.error-info",
+                            "Next": "FAIL - Move file to error folder"
+                        }
+                    ]
+                },
+                "Start Crawler For Partitioned File": {
+                    "Type": "Task",
+                    "ResultPath": "$.taskresult",
+                    "ResultSelector": {
+                        "cnt": "0",
+                        "crawler_name": "${CrawlPartitionedFile}"
+                    },
+                    "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StartCrawlerFunction}",
+                    "Parameters": {
+                        "Crawler_Name": "${CrawlPartitionedFile}"
+                    },
+                    "Retry": [
+                        {
+                            "ErrorEquals": [
+                                "CrawlerRunningException"
+                            ],
+                            "IntervalSeconds": 10,
+                            "MaxAttempts": 10,
+                            "BackoffRate": 2
+                        }
+                    ],
+                    "Catch": [
+                        {
+                            "ErrorEquals": [
+                                "CrawlerRunningException"
+                            ],
+                            "Comment": "Crawler is running for long time",
+                            "Next": "FAIL - Move file to error folder"
+                        },
+                        {
+                            "ErrorEquals": [
+                                "States.ALL"
+                            ],
+                            "Comment": "Error fall back",
+                            "ResultPath": "$.error-info",
+                            "Next": "FAIL - Move file to error folder"
+                        }
+                    ],
+                    "Next": "Partitioned File Crawler Status Check"
+                },
+                "Partitioned File Crawler Status Check": {
+                    "Type": "Task",
+                    "InputPath": "$.taskresult",
+                    "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${CrawlerStatusCheckFunction}",
+                    "Next": "Partitioned File Crawler Finished?",
+                    "ResultPath": "$.taskresult"
+                },
+                "Partitioned File Crawler Finished?": {
+                    "Type": "Choice",
+                    "Choices": [
+                        {
+                            "Or": [
+                                {
+                                    "Variable": "$.taskresult.Status",
+                                    "StringEquals": "STOPPING"
+                                },
+                                {
+                                    "Variable": "$.taskresult.Status",
+                                    "StringEquals": "RUNNING"
+                                }
+                            ],
+                            "Next": "Partitioned File Crawler Wait"
+                        },
+                        {
+                            "Variable": "$.taskresult.Status",
+                            "StringEquals": "READY",
+                            "Next": "Move file to archive"
+                        },
+                        {
+                            "Variable": "$.taskresult.Status",
+                            "StringEquals": "RETRYLIMITREACH",
+                            "Next": "FAIL - Move file to error folder"
+                        },
+                        {
+                            "Variable": "$.taskresult.Status",
+                            "StringEquals": "FAILED",
+                            "Next": "FAIL - Move file to error folder"
+                        }
+                    ],
+                    "Default": "FAIL - Move file to error folder"
+                },
+                "Partitioned File Crawler Wait": {
+                    "Type": "Wait",
+                    "Seconds": 30,
+                    "Next": "Partitioned File Crawler Status Check"
+                },
+                "Fail": {
+                    "Type": "Fail",
+                    "Cause": "validation failed",
+                    "Error": "ValidationError"
+                },
+                "Move file to archive": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${ArchiveFunction}",
+                    "Next": "Success Notification"
+                },
+                "Success Notification": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${NotificationFunction}",
+                    "Parameters": {
+                      "executionname.$": "$$.Execution.Name",
+                      "msg.$": "$.msg",
+                      "status.$": "$.Status"
+                    },
+                    "End": true
+                }
+            }
+        }
+
+  GlueJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Command:
+        Name: glueetl
+        ScriptLocation: !Sub "s3://${pS3BucketName}/glue/gluejob.py"
+      ExecutionProperty:
+        MaxConcurrentRuns: 20
+      MaxRetries: 0
+      Role: !Ref GlueRole
+      GlueVersion: "2.0"
+
+  CrawlRawFile:
+    Type: "AWS::Glue::Crawler"
+    Properties:
+      Role: !Ref GlueRole
+      Description: "Crawler to generate the schema of the raw file"
+      SchemaChangePolicy:
+        UpdateBehavior: "UPDATE_IN_DATABASE"
+        DeleteBehavior: "DELETE_FROM_DATABASE"
+      DatabaseName: !Ref GlueDB
+      Targets: 
+        S3Targets: 
+          - Path: !Sub "s3://${pS3BucketName}/${pStageFolder}"
+      Configuration: "{\"Version\":1.0,\"Grouping\":{\"TableGroupingPolicy\":\"CombineCompatibleSchemas\"}}"
+  
+  CrawlPartitionedFile:
+    Type: "AWS::Glue::Crawler"
+    Properties:
+      Role: !Ref GlueRole
+      Description: "Crawler to generate the schema of the partitioned file"
+      SchemaChangePolicy:
+        UpdateBehavior: "UPDATE_IN_DATABASE"
+        DeleteBehavior: "DELETE_FROM_DATABASE"
+      DatabaseName: !Ref GlueDB
+      Targets: 
+        S3Targets: 
+          - Path: !Sub "s3://${pS3BucketName}/${pTransformFolder}"
+  
+  LambdaLayer:
+      Type: AWS::Serverless::LayerVersion
+      Properties:
+        LayerName: cfnresource-lib
+        Description: My layer
+        ContentUri: ./myLayer
+        CompatibleRuntimes:
+          - python3.6
+          - python3.7
+          - python3.8
+        LicenseInfo: MIT

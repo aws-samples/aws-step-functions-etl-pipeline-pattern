@@ -1,0 +1,38 @@
+[
+  {
+    "ParameterKey": "pS3BucketName",
+    "ParameterValue": "etl-orchestration-step-function-2021-dummy-1"
+  },
+  {
+    "ParameterKey": "pSourceFolder",
+    "ParameterValue": "source"
+  },
+  {
+    "ParameterKey": "pStageFolder",
+    "ParameterValue": "stage"
+  },
+  {
+    "ParameterKey": "pTransformFolder",
+    "ParameterValue": "transform"
+  },
+  {
+    "ParameterKey": "pErrorFolder",
+    "ParameterValue": "error"
+  },
+  {
+    "ParameterKey": "pArchiveFolder",
+    "ParameterValue": "archive"
+  },
+  {
+    "ParameterKey": "pDirsToCreate",
+    "ParameterValue": "source,archive,error,stage,transform"
+  },
+  {
+    "ParameterKey": "pEmailforNotification",
+    "ParameterValue": "gangapad@amazon.com"
+  },
+  {
+    "ParameterKey": "pDatasetSchema",
+    "ParameterValue": "{\"Date\":{\"type\": \"datetime\", \"format\": \"%m/%d/%Y\" },\"Description\":{\"type\": \"string\"},\"Deposits\":{\"type\": \"float\"},\"Withdrawls\":{\"type\": \"float\"},\"Balance\":{\"type\": \"float\"}}"
+  }
+]

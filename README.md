@@ -42,7 +42,7 @@ AWS Step Functions Limits Overview
 
 ## Product Versions
 * Python 3 for AWS Lambda
-* AWS Glue version
+* AWS Glue version 2
 
 ## Architecture
 
@@ -70,7 +70,7 @@ AWS Step Functions Limits Overview
  - myLayer - This folder contains python packages need to create the required lambda layer for this project
  - lambda - This folder contains the following lambda function
     - move_file.py - Moves the source dataset to archive/transform/error folder 
-    - check_crawler.py - Check the status of AWS Glue crawler
+    - check_crawler.py - Check the status of AWS Glue crawler. It checks "RETRYLIMIT" ( configuratble environment parameter) number of times before it sends a failure message. 
     - start_crawler.py - Start the AWS Glue crawler
     - start_step_function.py - Starts AWS Step Functions.
     - start_codebuild.py - Start AWS CodeBuild Project
@@ -110,9 +110,9 @@ Follow the below step to deploy this pattern using Cloudformation template
 ## Test
 
 1. Once, stack deployment is completed, navigate to source folder inside S3 bucket ( which was provided in Step 3a above)
-2. Upload a sample csv file with valid schema ( a sample file Bank_Transaction.csv is attached) to trigger the ETL Pipeline through AWS Step Functions.
-3. Check the ETL pipeline status in the AWS Step Functions.
-4. Once ETL pipeline completes, partitioned dataset will be available in transform folder inside S3 Bucket ( set in Step 3a)
+2. Upload a sample csv file with valid schema ( a sample file Sample_Bank_Transaction_Raw_Dataset.csv is attached) to trigger the ETL Pipeline through AWS Step Functions.
+3. Check the ETL pipeline status in the AWS Step Functions console.
+4. Once ETL pipeline completes, partitioned dataset will be available in transform folder inside S3 Bucket ( set in Step 3a).
 Partitioned Table will be available in AWS Glue Catalog. 
 5. Optionally, Amazon Athena can be used for adhoc query on the partitioned/transformed dataset
 

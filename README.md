@@ -24,7 +24,7 @@ partition the dataset with year/month/day  and store in a transformed folder for
 ## Prerequisites 
 
 * An active AWS account with programmatic access
-* AWS CLI with AWS account configuration, so that you can create AWS resources by deploying cloudformation stack
+* AWS CLI with AWS account configuration, so that you can create AWS resources by deploying CloudFormation  stack
 * Amazon S3 bucket 
 * CSV dataset with correct schema ( attached is a sample csv file with correct schema and data type)
 * Web browser
@@ -42,7 +42,7 @@ AWS Step Functions Limits Overview
 
 ## Product Versions
 * Python 3 for AWS Lambda
-* AWS Glue version
+* AWS Glue version 2
 
 ## Architecture
 
@@ -52,14 +52,14 @@ AWS Step Functions Limits Overview
 
 ## High level work flow
 
-1. User uploads a csv file. AWS S3 Notification event tiggers a AWS Lambda function 
+1. User uploads a csv file. AWS S3 Notification event triggers a AWS Lambda function 
 2. AWS Lambda function starts the step function state machine
 3. AWS Lambda function validates the schema and data type of the raw file
 4. AWS Glue Crawler create the schema of the raw file and move the file to stage folder
 5. AWS Glue job transform, compress and partition the raw file into Parquet format
 6. AWS Glue job also move the file to transform folder.
 7. AWS Glue Crawler create the schema from the transformed file . The Resulting Schema can be used by analytics job
-8. AWS SNS sends succesful notification
+8. AWS SNS sends successful notification
 9. File moved to error folder if validation fails
 10. AWS SNS sends error notification for any error inside workflow
 11. Amazon Athena used for any adhoc query on partitioned dataset. 
@@ -70,7 +70,7 @@ AWS Step Functions Limits Overview
  - myLayer - This folder contains python packages need to create the required lambda layer for this project
  - lambda - This folder contains the following lambda function
     - move_file.py - Moves the source dataset to archive/transform/error folder 
-    - check_crawler.py - Check the status of AWS Glue crawler
+    - check_crawler.py - Check the status of AWS Glue crawler. It checks "**RETRYLIMIT**" (configurable environment variable) number of times before it sends a failure message. 
     - start_crawler.py - Start the AWS Glue crawler
     - start_step_function.py - Starts AWS Step Functions.
     - start_codebuild.py - Start AWS CodeBuild Project
@@ -79,9 +79,9 @@ AWS Step Functions Limits Overview
     - notification.py - Sends Success or Error notification at the end of Pipeline.
 
 ## Deploy
-This pattern can be deployed through AWS Cloudformation. See the attachment for the Cloudformation template file.
+This pattern can be deployed through AWS CloudFormation. See the attachment for the CloudFormation template file.
 
-Follow the below step to deploy this pattern using Cloudformation template
+Follow the below step to deploy this pattern using CloudFormation template
 
 1.	Clone the Repo
 2.	Navigate to the Directory
@@ -110,9 +110,9 @@ Follow the below step to deploy this pattern using Cloudformation template
 ## Test
 
 1. Once, stack deployment is completed, navigate to source folder inside S3 bucket ( which was provided in Step 3a above)
-2. Upload a sample csv file with valid schema ( a sample file Bank_Transaction.csv is attached) to trigger the ETL Pipeline through AWS Step Functions.
-3. Check the ETL pipeline status in the AWS Step Functions.
-4. Once ETL pipeline completes, partitioned dataset will be available in transform folder inside S3 Bucket ( set in Step 3a)
+2. Upload a sample csv file with valid schema ( a sample file Sample_Bank_Transaction_Raw_Dataset.csv is attached) to trigger the ETL Pipeline through AWS Step Functions.
+3. Check the ETL pipeline status in the AWS Step Functions console.
+4. Once ETL pipeline completes, partitioned dataset will be available in transform folder inside S3 Bucket ( set in Step 3a).
 Partitioned Table will be available in AWS Glue Catalog. 
 5. Optionally, Amazon Athena can be used for adhoc query on the partitioned/transformed dataset
 

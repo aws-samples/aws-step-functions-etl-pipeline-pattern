@@ -24,12 +24,8 @@
     "ParameterValue": "archive"
   },
   {
-    "ParameterKey": "pDirsToCreate",
-    "ParameterValue": "source,archive,error,stage,transform"
-  },
-  {
     "ParameterKey": "pEmailforNotification",
-    "ParameterValue": "gangapad@amazon.com"
+    "ParameterValue": "validemailaddress@xyz.com"
   },
   {
     "ParameterKey": "pDatasetSchema",

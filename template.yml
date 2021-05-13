@@ -6,37 +6,32 @@ Parameters:
 
   pS3BucketName:
     Type: String
-    Description: "S3 bucket to create."
+    Description: "Unique S3 bucket to create."
     AllowedPattern: "[a-zA-Z][a-zA-Z0-9_-]*"
-
-  pDirsToCreate:
-    Description: "Comma delimited list of directories to create."
-    Type: CommaDelimitedList
-    Default: "source,archive,error,stage,transform"
 
   pStageFolder:
     Type: String
-    Description: Souce File Path
+    Description: "Folder to store staging files"
     Default: "stage"
 
   pTransformFolder:
     Type: String
-    Description: Souce File Path
+    Description: "Folder to store transfored dataset"
     Default: "transform"
 
   pArchiveFolder:
     Type: String
-    Description: Souce File Path
+    Description: "Folder to store archived dataset"
     Default: "archive"
 
   pErrorFolder:
     Type: String
-    Description: Souce File Path
+    Description: "Folder to store dataset for any error"
     Default: "error"
 
   pSourceFolder:
     Type: String
-    Description: Souce File Path
+    Description: "Source Folder to upload raw csv dataset"
     Default: "source"
 
   pDatasetSchema:
@@ -44,6 +39,7 @@ Parameters:
     Description: Expected Schema for the source DatasetSchema
 
   pEmailforNotification:
+    Description: "Valid email address to send success or error notification"
     Type: String
 
 Resources:
@@ -60,9 +56,7 @@ Resources:
     Properties:
       ServiceToken: !GetAtt LambdaFunctionS3Object.Arn
       the_bucket: !Ref S3Bucket
-      #dirs_to_create: !Ref pDirsToCreate
-      dirs_to_create: !Join [ ",", [!Ref pSourceFolder,!Ref pStageFolder,!Ref pErrorFolder,!Ref pArchiveFolder,!Ref pTransformFolder]
-
+      dirs_to_create: !Join [ ",", [!Ref pSourceFolder,!Ref pStageFolder,!Ref pErrorFolder,!Ref pArchiveFolder,!Ref pTransformFolder]]
       file_prefix: "glue/gluejob.py"
       file_content: !Sub |
         import sys

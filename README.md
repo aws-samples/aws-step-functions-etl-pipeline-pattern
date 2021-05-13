@@ -17,7 +17,7 @@ partition the dataset with year/month/day  and store in a transformed folder for
 - [Product Versions](#Product-Versions)
 - [Architecture](#Architecture)
 - [High level work flow](#High-level-work-flow)
-- [File Details](#File-Details)
+- [Repository Structure](#Repository-Structure)
 - [Deploy](#Deploy)
 - [Sample Workflow Execution](#Sample-Workflow-Execution-and-Notification)
 
@@ -64,10 +64,10 @@ AWS Step Functions Limits Overview
 10. AWS SNS sends error notification for any error inside workflow
 11. Amazon Athena used for any adhoc query on partitioned dataset. 
 
-## File Details
+## Repository Structure
 - template.yml - CloudFormation template file
-- parameter.json - File that contains all the parameters and their value. This file needs to updated to change the parameter value as described below
- - myLayer - This folder contains python packages need to create the required lambda layer for this project
+- parameter.json - File that contains all the parameters and their respective values. This file needs to be updated to change the parameter value as described below
+ - myLayer - This folder contains python packages needed to create the required lambda layer for this project
  - lambda - This folder contains the following lambda function
     - move_file.py - Moves the source dataset to archive/transform/error folder 
     - check_crawler.py - Check the status of AWS Glue crawler. It checks "**RETRYLIMIT**" (configurable environment variable) number of times before it sends a failure message. 
@@ -79,9 +79,9 @@ AWS Step Functions Limits Overview
     - notification.py - Sends Success or Error notification at the end of Pipeline.
 
 ## Deploy
-This pattern can be deployed through AWS CloudFormation. See the attachment for the CloudFormation template file.
+This pattern can be deployed through AWS CloudFormation template.
 
-Follow the below step to deploy this pattern using CloudFormation template
+Follow the below step to deploy this pattern using CloudFormation template file [template.yml](template.yml) included in this repository.
 
 1.	Clone the Repo
 2.	Navigate to the Directory

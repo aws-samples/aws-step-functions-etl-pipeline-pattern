@@ -6,7 +6,7 @@ Parameters:
 
   pS3BucketName:
     Type: String
-    Description: "Unique S3 bucket to create."
+    Description: "Unique S3 bucket to create"
     AllowedPattern: "[a-zA-Z][a-zA-Z0-9_-]*"
 
   pStageFolder:
@@ -16,7 +16,7 @@ Parameters:
 
   pTransformFolder:
     Type: String
-    Description: "Folder to store transfored dataset"
+    Description: "Folder to store transformed dataset"
     Default: "transform"
 
   pArchiveFolder:
@@ -31,12 +31,12 @@ Parameters:
 
   pSourceFolder:
     Type: String
-    Description: "Source Folder to upload raw csv dataset"
+    Description: "Source Folder to upload raw csv dataset to trigger the AWS Step functions"
     Default: "source"
 
   pDatasetSchema:
     Type: String
-    Description: Expected Schema for the source DatasetSchema
+    Description: "Expected Schema for the source DatasetSchema"
 
   pEmailforNotification:
     Description: "Valid email address to send success or error notification"
@@ -240,7 +240,6 @@ Resources:
               - "s3:Delete*"
             Resource: !Sub "arn:aws:s3:::${pS3BucketName}/*"
 
-
   LambdaRole: 
     Type: "AWS::IAM::Role"
     Properties: 
@@ -256,8 +255,6 @@ Resources:
       ManagedPolicyArns:
           - !Ref ManagedPolicyforlambda
           - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-
-      Path: "/"
 
   StepFunctionRole: 
     Type: "AWS::IAM::Role"
@@ -469,7 +466,6 @@ Resources:
           source_folder_name: !Ref pSourceFolder
           schema: !Ref pDatasetSchema
 
-
   StartCodeBuildProjectFunction:
     Type: AWS::Serverless::Function
     Description: "Start Code Build project by lambda function"
@@ -498,7 +494,6 @@ Resources:
                 - "glue.amazonaws.com"
             Action:
               - "sts:AssumeRole"
-      Path: "/"
       Policies:
         -
           PolicyName: "root"

@@ -82,37 +82,6 @@ Resources:
         datasink4 = glueContext.write_dynamic_frame.from_options(frame = dropnullfields3, connection_type = "s3", format_options = {"compression": "snappy"}, connection_options = {"path": "s3://${pS3BucketName}/${pTransformFolder}","partitionKeys":["year","month","day"]}, format = "glueparquet", transformation_ctx = "datasink4")
         job.commit()
 
-  S3CustomResourcestepfunction:
-    Type: Custom::S3CustomResource
-    Properties:
-      ServiceToken: !GetAtt LambdaFunctionS3Object.Arn
-      the_bucket: !Ref S3Bucket
-      dirs_to_create: "Step_Function"
-      file_prefix: "step_funciton"
-      file_content: !Sub |
-        import sys
-        from awsglue.transforms import *
-        from awsglue.utils import getResolvedOptions
-        from pyspark.context import SparkContext
-        from awsglue.context import GlueContext
-        from awsglue.job import Job
-
-        args = getResolvedOptions(sys.argv, ['JOB_NAME'])
-
-        sc = SparkContext()
-        glueContext = GlueContext(sc)
-        spark = glueContext.spark_session
-        job = Job(glueContext)
-        job.init(args['JOB_NAME'], args)
-        datasource0 = glueContext.create_dynamic_frame.from_catalog(database = "${GlueDB}", table_name = "${pStageFolder}", transformation_ctx = "datasource0")
-        applymapping1 = ApplyMapping.apply(frame = datasource0, mappings = [("date", "string", "date", "string"), ("description", "string", "description", "string"), ("deposits", "double", "deposits", "double"), ("withdrawls", "double", "withdrawls", "double"), ("balance", "double", "balance", "double"), ("year", "long", "year", "int"), ("month", "long", "month", "int"), ("day", "long", "day", "int")], transformation_ctx = "applymapping1")
-        resolvechoice2 = ResolveChoice.apply(frame = applymapping1, choice = "make_struct", transformation_ctx = "resolvechoice2")
-
-        dropnullfields3 = DropNullFields.apply(frame = resolvechoice2, transformation_ctx = "dropnullfields3")
-
-        datasink4 = glueContext.write_dynamic_frame.from_options(frame = dropnullfields3, connection_type = "s3", format_options = {"compression": "snappy"}, connection_options = {"path": "s3://${pS3BucketName}/${pTransformFolder}","partitionKeys":["year","month","day"]}, format = "glueparquet", transformation_ctx = "datasink4")
-        job.commit()
-
   StartCodeBuildProject:
     Type: Custom::StartCodeBuildProject
     Properties:
@@ -366,6 +335,11 @@ Resources:
               - "s3:Put*"
               - "s3:Delete*"
             Resource: !Sub "arn:aws:s3:::${pS3BucketName}/*"
+          - Sid: "s3deletebucket"
+            Effect: "Allow"
+            Action: 
+              - "s3:DeleteBucket"
+            Resource: !Sub "arn:aws:s3:::${pS3BucketName}"
           - Sid: "SNStopicaccess"
             Effect: "Allow"
             Action: "sns:Publish"

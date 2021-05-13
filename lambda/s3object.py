@@ -20,7 +20,7 @@ def handler(event, context):
     try:
         if the_event in ('Create', 'Update'):
             print("Requested folders: ", str(dirs_to_create))
-            for dir_name in dirs_to_create:
+            for dir_name in dirs_to_create.split(","):
                 print("Creating: ", str(dir_name))
                 s_3.put_object(Bucket=the_bucket,
                                 Key=(dir_name
@@ -32,8 +32,14 @@ def handler(event, context):
             #     print("No file created")
         elif the_event == 'Delete':
             print("Deleting S3 content...")
-            b_operator = boto3.resource('s3')
-            b_operator.Bucket(str(the_bucket)).objects.all().delete()
+            #s3_resource.Bucket(str(the_bucket)).objects.all().delete()
+            bucket = s3_resource.Bucket(the_bucket)
+            bucket.objects.all().delete()
+            print("All object deleted")
+            bucket.object_versions.delete()
+            print("All object version deleted")
+            s_3.delete_bucket(Bucket=str(the_bucket))
+            print("Bucket deleted")
         # Everything OK... send the signal back
         print("Execution succesfull!")
         cfnresponse.send(event,

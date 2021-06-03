@@ -105,6 +105,7 @@ Resources:
   SNSTopic:
     Type: AWS::SNS::Topic
     Properties:
+      KmsMasterKeyId: "alias/aws/sns"
       Subscription:
         - Endpoint: !Ref pEmailforNotification
           Protocol: email

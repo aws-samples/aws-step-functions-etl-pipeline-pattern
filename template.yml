@@ -838,3 +838,8 @@ Resources:
           - python3.7
           - python3.8
         LicenseInfo: MIT
+
+Outputs:
+  GlueDBOutput:
+    Description: GlueDB Name
+    Value: !Ref GlueDB

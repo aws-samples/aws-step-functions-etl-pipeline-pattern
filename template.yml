@@ -44,12 +44,12 @@ Parameters:
 
 Resources:
 
-  LambdaLayerParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: !Sub ${AWS::StackName}_lambda_layer
-      Type: String
-      Value: "NA"
+  # LambdaLayerParameter:
+  #   Type: AWS::SSM::Parameter
+  #   Properties:
+  #     Name: !Sub ${AWS::StackName}_lambda_layer
+  #     Type: String
+  #     Value: "NA"
 
   S3CustomResource:
     Type: Custom::S3CustomResource
@@ -87,8 +87,9 @@ Resources:
     Properties:
       ServiceToken: !GetAtt StartCodeBuildProjectFunction.Arn
       Update_lambda_layer: "yes"
+      PROJECT_NAME: !Ref CodeBuildProject
     DependsOn:
-      - "LambdaLayerParameter"
+     - StartCodeBuildProjectFunction
 
   LambdaFunctionS3Object:
      Type: AWS::Serverless::Function
@@ -100,7 +101,7 @@ Resources:
        CodeUri: lambda
        Role: !GetAtt LambdaRole.Arn
        Timeout: 360
-       Runtime: python3.6
+       Runtime: python3.9
    
   SNSTopic:
     Type: AWS::SNS::Topic
@@ -132,13 +133,12 @@ Resources:
       PolicyDocument: 
         Version: "2012-10-17"
         Statement: 
-          - Sid: "lambdalayeraccess"
+          - Sid: "ecraccess"
             Effect: "Allow"
             Action: 
-              -  "lambda:Publish*"
-              -  "lambda:List*"
-            Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:${AWS::StackName}-pandas-layer"
-
+              -  "ecr:*"
+            Resource: "*"
+           
           - Sid: "logaccess"
             Effect: "Allow"
             Action: 
@@ -146,12 +146,6 @@ Resources:
               -  logs:CreateLogStream
               -  logs:PutLogEvents
             Resource: "*"
-
-          - Sid: "SSMPutparamater"
-            Effect: "Allow"
-            Action:
-              - ssm:PutParameter
-            Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${LambdaLayerParameter}"
 
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
@@ -164,40 +158,124 @@ Resources:
           phases:
             build:
               commands:
-                - mkdir -p build/python
-                - echo "pandas==1.2.3" > requirements.txt
-                - echo "numpy==1.20.2" >> requirements.txt
+                - echo "pandas==1.5.1" >> requirements.txt
                 - echo "s3fs" >> requirements.txt
                 - echo "pytz" >> requirements.txt
                 - echo "cerberus" >> requirements.txt
-                - pip install -r requirements.txt -t ./build/python
-                - cd ./build && zip -r ../temp.zip .
-                - pwd
-                - ls -l
-                - ls -lrt
-                - cd ..
-                - ls -l
-                - out=$(aws lambda publish-layer-version --layer-name ${LayerName} --zip-file fileb://temp.zip --compatible-runtimes python3.7 python3.8| jq .LayerVersionArn |tr -d "\"")
-                - aws ssm put-parameter  --name ${SSMParameterName} --value ${out} --type "String" --overwrite
+                - |
+                  cat > validation.py << EOF
+                  import json
+                  import pandas as pd
+                  from cerberus import Validator
+                  from datetime import datetime
+                  import boto3
+                  import os
+                              
+                          
+                  def lambda_handler(event, context):
+                      
+                      ''' 
+                      This function validates input raw dataset against schema specified in the env variable
+                      '''
+                      print("Starting Input Validation")
+                      print(event)
+                      result = {}
+                      s3_resource = boto3.resource('s3')
+                      #to_date = lambda s: datetime.strptime(s, os.environ['dateformat'])
+                      bucket_name = event['bucket_name']
+                      key_name = event['key_name']
+                      source_file_name = event['file_name']
+                      #source_file_name_to_copy = bucket_name + "/" + key_name
+                      #error_file_name="error/" + source_file_name
+
+                      schema = {}
+                      schema = json.loads(os.environ['schema'])   
+
+                      for keys in schema:
+                          if 'format' in schema[keys]:
+                              date_format_provided = schema[keys]['format']
+                              to_date = lambda s: datetime.strptime(s, date_format_provided)
+                              schema[keys].pop("format")
+                              schema[keys]['coerce'] = to_date
+                      
+                      v = Validator(schema)
+                      v.allow_unknown = False
+                      v.require_all = True
+                      source_file_path = "s3://" + bucket_name + "/" + key_name
+                      try:
+                          df = pd.read_csv(source_file_path)
+                          print("Successfuly read : " + source_file_path)
+                      except:
+                          result['Validation'] = "FAILURE"
+                          result['Reason'] = "Errro while reading csv"
+                          result['Location'] = os.environ['source_folder_name']
+                          print("Error while reading csv")
+                          return(result)      
+                      result['Validation'] = "SUCCESS"
+                      result['Location'] = os.environ['source_folder_name']
+                      df_dict = df.to_dict(orient='records')
+                      transformed_file_name = "s3://" + bucket_name + "/" + str(os.environ['stage_folder_name']) + "/" + source_file_name
+
+                      if len(df_dict) == 0:
+                          result['Validation'] = "FAILURE"
+                          result['Reason'] = "NO RECORD FOUND"
+                          result['Location'] = os.environ['source_folder_name']
+                          print("Moving file to error folder")
+                          return(result)
+                      for idx, record in enumerate(df_dict):
+                          if not v.validate(record):
+                              result['Validation'] = "FAILURE"
+                              result['Reason'] = str(v.errors) + " in record number " + str(idx)
+                              result['Location'] = os.environ['source_folder_name']
+                              print("Moving file to error folder")
+                              return(result)
+                              break
+
+                      df['Month'] = df['Date'].astype(str).str[0:2]
+                      df['Day'] = df['Date'].astype(str).str[3:5]
+                      df['Year'] = df['Date'].astype(str).str[6:10]
+                      df.to_csv(transformed_file_name, index=False)
+                      s3_resource.Object(bucket_name, key_name).delete()
+                      print("Successfuly moved file to  : " + transformed_file_name)
+                      return(result)
+                  EOF
+                - |
+                  cat > Dockerfile << EOF
+                  FROM public.ecr.aws/lambda/python:3.8
+                  COPY requirements.txt  .
+                  RUN  pip3 install -r requirements.txt --target /var/task
+                  COPY validation.py /var/task
+                  CMD [ "validation.lambda_handler" ] 
+                  EOF
+                - cat Dockerfile
+                - aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${Account}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                - docker build -t etl . 
+                - docker tag etl:latest ${ECRreponame}:latest
+                - docker push ${ECRreponame}:latest
 
       ServiceRole:
         Fn::GetAtt: [ CodeBuildRole, Arn ]
       Artifacts:
         Type: NO_ARTIFACTS
       Environment:
+        PrivilegedMode: true
         Type: LINUX_CONTAINER
-        ComputeType: BUILD_GENERAL1_SMALL
+        ComputeType: BUILD_GENERAL1_MEDIUM
         Image: aws/codebuild/standard:3.0
         EnvironmentVariables:
-          - Name: LayerName
+          - Name: ECRreponame
             Type: PLAINTEXT
-            Value: !Sub "${AWS::StackName}-pandas-layer"
-          - Name: SSMParameterName
-            Type: PLAINTEXT
-            Value: !Ref LambdaLayerParameter
-
+            Value:
+              Fn::GetAtt:
+                - ECRRepository
+                - RepositoryUri
+          - Name: Region
+            Value: !Sub "${AWS::Region}"
+          - Name: Account
+            Value: !Ref AWS::AccountId
+          - Name: s3bucket
+            Value: !Ref pS3BucketName
       TimeoutInMinutes: 30
-
 
   BasicLambdaRole: 
     Type: "AWS::IAM::Role"
@@ -397,7 +475,7 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: move_file.lambda_handler
       CodeUri: lambda
-      Runtime: python3.7
+      Runtime: python3.9
       Timeout: 30
       Environment:
         Variables:
@@ -410,7 +488,7 @@ Resources:
       Role: !GetAtt BasicLambdaRole.Arn
       Handler: start_step_function.lambda_handler
       CodeUri: lambda
-      Runtime: python3.7
+      Runtime: python3.9
       Timeout: 60
       Environment:
         Variables:
@@ -422,7 +500,7 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: start_crawler.lambda_handler
       CodeUri: lambda
-      Runtime: python3.7
+      Runtime: python3.9
       Timeout: 60
 
   NotificationFunction:
@@ -431,7 +509,7 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: notification.lambda_handler
       CodeUri: lambda
-      Runtime: python3.7
+      Runtime: python3.9
       Timeout: 30
       Environment:
         Variables:
@@ -443,40 +521,42 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: check_crawler.lambda_handler
       CodeUri: lambda
-      Runtime: python3.7
+      Runtime: python3.9
       Timeout: 30
       Environment:
         Variables:
           RETRYLIMIT: 200
         
-  InputValidationFunction:
-    Type: AWS::Serverless::Function
-    DependsOn:
-      - "StartCodeBuildProject"
-    Properties:
-      Layers: 
-        - !GetAtt LambdaLayerParameter.Value
-      Role: !GetAtt LambdaRole.Arn
-      Handler: validation.lambda_handler
-      CodeUri: lambda
-      Runtime: python3.8
-      Timeout: 500
-      Environment:
-        Variables:
-          stage_folder_name: !Ref pStageFolder
-          source_folder_name: !Ref pSourceFolder
-          schema: !Ref pDatasetSchema
+  # InputValidationFunction:
+  #   Type: AWS::Serverless::Function
+  #   DependsOn:
+  #     - "StartCodeBuildProject"
+  #   Properties:
+  #     Layers: 
+  #       - !GetAtt LambdaLayerParameter.Value
+  #       # - !GetAtt LambdaLayerParameter1.Value
+
+  #     Role: !GetAtt LambdaRole.Arn
+  #     Handler: validation.lambda_handler
+  #     CodeUri: lambda
+  #     Runtime: python3.9
+  #     Timeout: 500
+  #     Environment:
+  #       Variables:
+  #         stage_folder_name: !Ref pStageFolder
+  #         source_folder_name: !Ref pSourceFolder
+  #         schema: !Ref pDatasetSchema
 
   StartCodeBuildProjectFunction:
     Type: AWS::Serverless::Function
-    Description: "Start Code Build project by lambda function"
+    Description: "Start Code Build project by lambda function."
     Properties:
       Layers: 
          - !Ref LambdaLayer
       Role: !GetAtt LambdaRole.Arn
       Handler: start_codebuild.lambda_handler
       CodeUri: lambda
-      Runtime: python3.6
+      Runtime: python3.9
       Timeout: 500
       Environment:
         Variables:
@@ -834,10 +914,35 @@ Resources:
         Description: My layer
         ContentUri: ./myLayer
         CompatibleRuntimes:
-          - python3.6
-          - python3.7
+          - python3.9
           - python3.8
         LicenseInfo: MIT
+  ECRRepository: 
+    Type: AWS::ECR::Repository
+    Properties: 
+      RepositoryName: "lambda_input_validation"
+
+  InputValidationFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: 
+      - StartCodeBuildProject
+    Properties:
+      PackageType: Image
+      Role:
+        Fn::GetAtt:
+        - LambdaRole
+        - Arn
+      Code:
+        ImageUri: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}:latest"
+      Architectures:
+        - x86_64
+      MemorySize: 2048
+      Timeout: 500
+      Environment:
+        Variables:
+          stage_folder_name: !Ref pStageFolder
+          source_folder_name: !Ref pSourceFolder
+          schema: !Ref pDatasetSchema
 
 Outputs:
   GlueDBOutput:

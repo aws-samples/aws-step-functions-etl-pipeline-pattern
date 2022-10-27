@@ -1,7 +1,7 @@
 [
   {
     "ParameterKey": "pS3BucketName",
-    "ParameterValue": "unique-bucket-name-dummy-2021"
+    "ParameterValue": "etl-pattern-fix-2022-1"
   },
   {
     "ParameterKey": "pSourceFolder",

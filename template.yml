@@ -100,7 +100,7 @@ Resources:
        CodeUri: lambda
        Role: !GetAtt LambdaRole.Arn
        Timeout: 360
-       Runtime: python3.6
+       Runtime: python3.9
    
   SNSTopic:
     Type: AWS::SNS::Topic
@@ -476,7 +476,7 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: start_codebuild.lambda_handler
       CodeUri: lambda
-      Runtime: python3.6
+      Runtime: python3.9
       Timeout: 500
       Environment:
         Variables:
@@ -794,11 +794,16 @@ Resources:
       Command:
         Name: glueetl
         ScriptLocation: !Sub "s3://${pS3BucketName}/glue/gluejob.py"
+      DefaultArguments:
+        "--enable-auto-scaling": "true"
+        "--job-bookmark-option": "job-bookmark-enable"
       ExecutionProperty:
         MaxConcurrentRuns: 20
       MaxRetries: 0
       Role: !Ref GlueRole
-      GlueVersion: "2.0"
+      GlueVersion: "3.0"
+      NumberOfWorkers: 100
+      WorkerType: G.1X
 
   CrawlRawFile:
     Type: "AWS::Glue::Crawler"
@@ -834,7 +839,7 @@ Resources:
         Description: My layer
         ContentUri: ./myLayer
         CompatibleRuntimes:
-          - python3.6
+          - python3.9
           - python3.7
           - python3.8
         LicenseInfo: MIT

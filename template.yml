@@ -400,7 +400,7 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: move_file.lambda_handler
       CodeUri: lambda
-      Runtime: python3.7
+      Runtime: python3.9
       Timeout: 30
       Environment:
         Variables:
@@ -413,7 +413,7 @@ Resources:
       Role: !GetAtt BasicLambdaRole.Arn
       Handler: start_step_function.lambda_handler
       CodeUri: lambda
-      Runtime: python3.7
+      Runtime: python3.9
       Timeout: 60
       Environment:
         Variables:
@@ -425,7 +425,7 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: start_crawler.lambda_handler
       CodeUri: lambda
-      Runtime: python3.7
+      Runtime: python3.9
       Timeout: 60
 
   CrawlerStatusCheckFunction:
@@ -434,7 +434,7 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: check_crawler.lambda_handler
       CodeUri: lambda
-      Runtime: python3.7
+      Runtime: python3.9
       Timeout: 30
       Environment:
         Variables:
@@ -828,8 +828,8 @@ Resources:
         ContentUri: ./myLayer
         CompatibleRuntimes:
           - python3.9
-          - python3.7
           - python3.8
+          - python3.7
         LicenseInfo: MIT
 
 Outputs:

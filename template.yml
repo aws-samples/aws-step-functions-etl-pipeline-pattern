@@ -128,7 +128,7 @@ Resources:
   BasicManagedPolicyforCodeBuild: 
     Type: "AWS::IAM::ManagedPolicy"
     Properties:
-      Description: "THis is sample CFN template"
+      Description: "This is sample CFN template"
       PolicyDocument: 
         Version: "2012-10-17"
         Statement: 
@@ -218,7 +218,7 @@ Resources:
   BasicManagedPolicyforlambda: 
     Type: "AWS::IAM::ManagedPolicy"
     Properties:
-      Description: "THis is sample CFN template"
+      Description: "This is sample CFN template"
       PolicyDocument: 
         Version: "2012-10-17"
         Statement: 
@@ -275,7 +275,7 @@ Resources:
   ManagedPolicyforstepfunction: 
     Type: "AWS::IAM::ManagedPolicy"
     Properties:
-      Description: "THis is sample CFN template"
+      Description: "This is sample CFN template"
       PolicyDocument: 
         Version: "2012-10-17"
         Statement: 
@@ -285,7 +285,6 @@ Resources:
             Resource: 
               - !GetAtt  ArchiveFunction.Arn
               - !GetAtt  StartCrawlerFunction.Arn
-              - !GetAtt  NotificationFunction.Arn
               - !GetAtt  CrawlerStatusCheckFunction.Arn
               - !GetAtt  InputValidationFunction.Arn
 
@@ -306,11 +305,15 @@ Resources:
               -  "xray:GetSamplingRules"
               -  "xray:GetSamplingTargets"
             Resource: "*"
-
+          - Sid: snsaccess
+            Effect: Allow
+            Action:
+              - sns:*
+            Resource: '*'
   ManagedPolicyforlambda: 
     Type: "AWS::IAM::ManagedPolicy"
     Properties:
-      Description: "THis is sample CFN template"
+      Description: "This is sample CFN template"
       PolicyDocument: 
         Version: "2012-10-17"
         Statement: 
@@ -424,18 +427,6 @@ Resources:
       CodeUri: lambda
       Runtime: python3.7
       Timeout: 60
-
-  NotificationFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Role: !GetAtt LambdaRole.Arn
-      Handler: notification.lambda_handler
-      CodeUri: lambda
-      Runtime: python3.7
-      Timeout: 30
-      Environment:
-        Variables:
-          SNS_TOPIC: !Ref SNSTopic
 
   CrawlerStatusCheckFunction:
     Type: AWS::Serverless::Function
@@ -563,16 +554,14 @@ Resources:
                     "Next": "Error Notification",
                     "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${ArchiveFunction}"
                 },
-
                 "Error Notification": {
-                      "Type": "Task",
-                      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${NotificationFunction}",
-                      "Parameters": {
-                        "executionname.$": "$$.Execution.Name",
-                        "msg.$": "$.msg",
-                        "status.$": "$.Status"
-                      },
-                      "Next": "Fail"
+                    "Type": "Task",
+                    "Resource": "arn:aws:states:::aws-sdk:sns:publish",
+                    "Parameters": {
+                           "Message.$": "$",
+                           "TopicArn": "${SNSTopic}"
+                    },
+                    "Next": "Fail"
                 },
                 "Start Crawler For Raw File": {
                     "Type": "Task",
@@ -777,11 +766,10 @@ Resources:
                 },
                 "Success Notification": {
                     "Type": "Task",
-                    "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${NotificationFunction}",
+                    "Resource": "arn:aws:states:::aws-sdk:sns:publish",
                     "Parameters": {
-                      "executionname.$": "$$.Execution.Name",
-                      "msg.$": "$.msg",
-                      "status.$": "$.Status"
+                           "Message.$": "$",
+                           "TopicArn": "${SNSTopic}"
                     },
                     "End": true
                 }

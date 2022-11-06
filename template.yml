@@ -100,7 +100,7 @@ Resources:
        CodeUri: lambda
        Role: !GetAtt LambdaRole.Arn
        Timeout: 360
-       Runtime: python3.6
+       Runtime: python3.9
    
   SNSTopic:
     Type: AWS::SNS::Topic
@@ -128,7 +128,7 @@ Resources:
   BasicManagedPolicyforCodeBuild: 
     Type: "AWS::IAM::ManagedPolicy"
     Properties:
-      Description: "THis is sample CFN template"
+      Description: "This is sample CFN template"
       PolicyDocument: 
         Version: "2012-10-17"
         Statement: 
@@ -167,9 +167,9 @@ Resources:
                 - mkdir -p build/python
                 - echo "pandas==1.2.3" > requirements.txt
                 - echo "numpy==1.20.2" >> requirements.txt
-                - echo "s3fs" >> requirements.txt
-                - echo "pytz" >> requirements.txt
-                - echo "cerberus" >> requirements.txt
+                - echo "s3fs==2022.10.0" >> requirements.txt
+                - echo "pytz==2022.5" >> requirements.txt
+                - echo "cerberus==1.3.4" >> requirements.txt
                 - pip install -r requirements.txt -t ./build/python
                 - cd ./build && zip -r ../temp.zip .
                 - pwd
@@ -218,7 +218,7 @@ Resources:
   BasicManagedPolicyforlambda: 
     Type: "AWS::IAM::ManagedPolicy"
     Properties:
-      Description: "THis is sample CFN template"
+      Description: "This is sample CFN template"
       PolicyDocument: 
         Version: "2012-10-17"
         Statement: 
@@ -275,7 +275,7 @@ Resources:
   ManagedPolicyforstepfunction: 
     Type: "AWS::IAM::ManagedPolicy"
     Properties:
-      Description: "THis is sample CFN template"
+      Description: "This is sample CFN template"
       PolicyDocument: 
         Version: "2012-10-17"
         Statement: 
@@ -285,7 +285,6 @@ Resources:
             Resource: 
               - !GetAtt  ArchiveFunction.Arn
               - !GetAtt  StartCrawlerFunction.Arn
-              - !GetAtt  NotificationFunction.Arn
               - !GetAtt  CrawlerStatusCheckFunction.Arn
               - !GetAtt  InputValidationFunction.Arn
 
@@ -306,11 +305,15 @@ Resources:
               -  "xray:GetSamplingRules"
               -  "xray:GetSamplingTargets"
             Resource: "*"
-
+          - Sid: snsaccess
+            Effect: Allow
+            Action:
+              - sns:*
+            Resource: '*'
   ManagedPolicyforlambda: 
     Type: "AWS::IAM::ManagedPolicy"
     Properties:
-      Description: "THis is sample CFN template"
+      Description: "This is sample CFN template"
       PolicyDocument: 
         Version: "2012-10-17"
         Statement: 
@@ -397,7 +400,7 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: move_file.lambda_handler
       CodeUri: lambda
-      Runtime: python3.7
+      Runtime: python3.9
       Timeout: 30
       Environment:
         Variables:
@@ -410,7 +413,7 @@ Resources:
       Role: !GetAtt BasicLambdaRole.Arn
       Handler: start_step_function.lambda_handler
       CodeUri: lambda
-      Runtime: python3.7
+      Runtime: python3.9
       Timeout: 60
       Environment:
         Variables:
@@ -422,20 +425,8 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: start_crawler.lambda_handler
       CodeUri: lambda
-      Runtime: python3.7
+      Runtime: python3.9
       Timeout: 60
-
-  NotificationFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Role: !GetAtt LambdaRole.Arn
-      Handler: notification.lambda_handler
-      CodeUri: lambda
-      Runtime: python3.7
-      Timeout: 30
-      Environment:
-        Variables:
-          SNS_TOPIC: !Ref SNSTopic
 
   CrawlerStatusCheckFunction:
     Type: AWS::Serverless::Function
@@ -443,7 +434,7 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: check_crawler.lambda_handler
       CodeUri: lambda
-      Runtime: python3.7
+      Runtime: python3.9
       Timeout: 30
       Environment:
         Variables:
@@ -476,7 +467,7 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: start_codebuild.lambda_handler
       CodeUri: lambda
-      Runtime: python3.6
+      Runtime: python3.9
       Timeout: 500
       Environment:
         Variables:
@@ -563,16 +554,14 @@ Resources:
                     "Next": "Error Notification",
                     "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${ArchiveFunction}"
                 },
-
                 "Error Notification": {
-                      "Type": "Task",
-                      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${NotificationFunction}",
-                      "Parameters": {
-                        "executionname.$": "$$.Execution.Name",
-                        "msg.$": "$.msg",
-                        "status.$": "$.Status"
-                      },
-                      "Next": "Fail"
+                    "Type": "Task",
+                    "Resource": "arn:aws:states:::aws-sdk:sns:publish",
+                    "Parameters": {
+                           "Message.$": "$",
+                           "TopicArn": "${SNSTopic}"
+                    },
+                    "Next": "Fail"
                 },
                 "Start Crawler For Raw File": {
                     "Type": "Task",
@@ -777,11 +766,10 @@ Resources:
                 },
                 "Success Notification": {
                     "Type": "Task",
-                    "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${NotificationFunction}",
+                    "Resource": "arn:aws:states:::aws-sdk:sns:publish",
                     "Parameters": {
-                      "executionname.$": "$$.Execution.Name",
-                      "msg.$": "$.msg",
-                      "status.$": "$.Status"
+                           "Message.$": "$",
+                           "TopicArn": "${SNSTopic}"
                     },
                     "End": true
                 }
@@ -794,11 +782,16 @@ Resources:
       Command:
         Name: glueetl
         ScriptLocation: !Sub "s3://${pS3BucketName}/glue/gluejob.py"
+      DefaultArguments:
+        "--enable-auto-scaling": "true"
+        "--job-bookmark-option": "job-bookmark-enable"
       ExecutionProperty:
         MaxConcurrentRuns: 20
       MaxRetries: 0
       Role: !Ref GlueRole
-      GlueVersion: "2.0"
+      GlueVersion: "3.0"
+      NumberOfWorkers: 100
+      WorkerType: G.1X
 
   CrawlRawFile:
     Type: "AWS::Glue::Crawler"
@@ -834,9 +827,9 @@ Resources:
         Description: My layer
         ContentUri: ./myLayer
         CompatibleRuntimes:
-          - python3.6
-          - python3.7
+          - python3.9
           - python3.8
+          - python3.7
         LicenseInfo: MIT
 
 Outputs:

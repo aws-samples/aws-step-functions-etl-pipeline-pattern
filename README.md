@@ -42,7 +42,7 @@ AWS Step Functions Limits Overview
 
 ## Product Versions
 * Python 3 for AWS Lambda
-* AWS Glue version 2
+* AWS Glue version 3
 
 ## Architecture
 
@@ -76,7 +76,6 @@ AWS Step Functions Limits Overview
     - start_codebuild.py - Start AWS CodeBuild Project
     - validation.py - Validates input raw dataset. 
     - s3object.py - Creates required directory structure inside S3 bucket
-    - notification.py - Sends Success or Error notification at the end of Pipeline.
 
 ## Deploy
 This pattern can be deployed through AWS CloudFormation template.

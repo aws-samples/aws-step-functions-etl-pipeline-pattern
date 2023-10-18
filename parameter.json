@@ -28,6 +28,10 @@
     "ParameterValue": "valid-email@xyz.com"
   },
   {
+    "ParameterKey": "pPrefix",
+    "ParameterValue": "demo"
+  },
+  {
     "ParameterKey": "pDatasetSchema",
     "ParameterValue": "{\"Date\":{\"type\": \"datetime\", \"format\": \"%m/%d/%Y\" },\"Description\":{\"type\": \"string\"},\"Deposits\":{\"type\": \"float\"},\"Withdrawls\":{\"type\": \"float\"},\"Balance\":{\"type\": \"float\"}}"
   }

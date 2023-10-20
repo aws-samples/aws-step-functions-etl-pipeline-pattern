@@ -41,6 +41,10 @@ Parameters:
   pEmailforNotification:
     Description: "Valid email address to send success or error notification"
     Type: String
+  
+  pPrefix:
+    Description: "Prefix string that will be appended to the resource name"
+    Type: String
 
 Resources:
 
@@ -350,8 +354,8 @@ Resources:
             Action: "glue:*"
             Resource: 
                 - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${GlueDB}"
-                - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:crawler/${CrawlPartitionedFile}"
-                - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:crawler/${CrawlRawFile}"
+                - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:crawler/${AWS::StackName}_CrawlPartitionedFile_${pPrefix}"
+                - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:crawler/${AWS::StackName}_CrawlRawFile_${pPrefix}"
                 - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${GlueDB}/*"
                 - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog"
 
@@ -568,11 +572,11 @@ Resources:
                     "ResultPath": "$.taskresult",
                     "ResultSelector": {
                         "cnt": "0",
-                        "crawler_name": "${CrawlRawFile}"
+                        "crawler_name": "${AWS::StackName}_CrawlRawFile_${pPrefix}"
                     },
                     "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StartCrawlerFunction}",
                     "Parameters": {
-                        "Crawler_Name": "${CrawlRawFile}"
+                        "Crawler_Name": "${AWS::StackName}_CrawlRawFile_${pPrefix}"
                     },
                     "Retry": [
                         {
@@ -673,11 +677,11 @@ Resources:
                     "ResultPath": "$.taskresult",
                     "ResultSelector": {
                         "cnt": "0",
-                        "crawler_name": "${CrawlPartitionedFile}"
+                        "crawler_name": "${AWS::StackName}_CrawlPartitionedFile_${pPrefix}"
                     },
                     "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StartCrawlerFunction}",
                     "Parameters": {
-                        "Crawler_Name": "${CrawlPartitionedFile}"
+                        "Crawler_Name": "${AWS::StackName}_CrawlPartitionedFile_${pPrefix}"
                     },
                     "Retry": [
                         {
@@ -795,7 +799,9 @@ Resources:
 
   CrawlRawFile:
     Type: "AWS::Glue::Crawler"
+    DependsOn: S3Bucket
     Properties:
+      Name: !Sub ${AWS::StackName}_CrawlRawFile_${pPrefix}
       Role: !Ref GlueRole
       Description: "Crawler to generate the schema of the raw file"
       SchemaChangePolicy:
@@ -809,8 +815,10 @@ Resources:
   
   CrawlPartitionedFile:
     Type: "AWS::Glue::Crawler"
+    DependsOn: S3Bucket
     Properties:
       Role: !Ref GlueRole
+      Name: !Sub ${AWS::StackName}_CrawlPartitionedFile_${pPrefix}
       Description: "Crawler to generate the schema of the partitioned file"
       SchemaChangePolicy:
         UpdateBehavior: "UPDATE_IN_DATABASE"

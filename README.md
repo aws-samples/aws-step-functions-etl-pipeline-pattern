@@ -26,7 +26,7 @@ partition the dataset with year/month/day  and store in a transformed folder for
 * An active AWS account with programmatic access
 * AWS CLI with AWS account configuration, so that you can create AWS resources by deploying CloudFormation  stack
 * Amazon S3 bucket 
-* CSV dataset with correct schema ( attached is a sample csv file with correct schema and data type)
+* CSV dataset with correct schema (attached is a sample csv file with correct schema and data type)
 * Web browser
 * AWS Glue console access
 * AWS Step Functions console access

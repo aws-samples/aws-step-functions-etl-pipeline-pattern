@@ -41,15 +41,19 @@ Parameters:
   pEmailforNotification:
     Description: "Valid email address to send success or error notification"
     Type: String
+  
+  pPrefix:
+    Description: "Prefix string that will be appended to the resource name"
+    Type: String
 
 Resources:
 
-  # LambdaLayerParameter:
-  #   Type: AWS::SSM::Parameter
-  #   Properties:
-  #     Name: !Sub ${AWS::StackName}_lambda_layer
-  #     Type: String
-  #     Value: "NA"
+  LambdaLayerParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub ${AWS::StackName}_lambda_layer_cerberus
+      Type: String
+      Value: "NA"
 
   S3CustomResource:
     Type: Custom::S3CustomResource
@@ -87,9 +91,8 @@ Resources:
     Properties:
       ServiceToken: !GetAtt StartCodeBuildProjectFunction.Arn
       Update_lambda_layer: "yes"
-      PROJECT_NAME: !Ref CodeBuildProject
     DependsOn:
-     - StartCodeBuildProjectFunction
+      - "LambdaLayerParameter"
 
   LambdaFunctionS3Object:
      Type: AWS::Serverless::Function
@@ -101,7 +104,7 @@ Resources:
        CodeUri: lambda
        Role: !GetAtt LambdaRole.Arn
        Timeout: 360
-       Runtime: python3.9
+       Runtime: python3.11
    
   SNSTopic:
     Type: AWS::SNS::Topic
@@ -133,7 +136,7 @@ Resources:
       PolicyDocument: 
         Version: "2012-10-17"
         Statement: 
-          - Sid: "ecraccess"
+          - Sid: "lambdalayeraccess"
             Effect: "Allow"
             Action: 
               -  "lambda:Publish*"
@@ -185,18 +188,18 @@ Resources:
       Artifacts:
         Type: NO_ARTIFACTS
       Environment:
-        PrivilegedMode: true
         Type: LINUX_CONTAINER
         ComputeType: BUILD_GENERAL1_MEDIUM
         Image: aws/codebuild/standard:3.0
         EnvironmentVariables:
-          - Name: ECRreponame
+          - Name: LayerName
             Type: PLAINTEXT
             Value: !Sub "${AWS::StackName}-layer"
           - Name: SSMParameterName
             Type: PLAINTEXT
             Value: !Ref LambdaLayerParameter
       TimeoutInMinutes: 30
+
 
   BasicLambdaRole: 
     Type: "AWS::IAM::Role"
@@ -446,7 +449,7 @@ Resources:
     Properties:
       Layers: 
         - !GetAtt LambdaLayerParameter.Value
-        - "arn:aws:lambda:us-east-1:336392948345:layer:AWSSDKPandas-Python311:10"
+        - !Sub "arn:aws:lambda:${AWS::Region}:336392948345:layer:AWSSDKPandas-Python311:10"
 
       Role: !GetAtt LambdaRole.Arn
       Handler: validation.lambda_handler
@@ -461,7 +464,7 @@ Resources:
 
   StartCodeBuildProjectFunction:
     Type: AWS::Serverless::Function
-    Description: "Start Code Build project by lambda function."
+    Description: "Start Code Build project by lambda function"
     Properties:
       Layers: 
          - !Ref LambdaLayer
@@ -836,32 +839,6 @@ Resources:
           - python3.10
           - python3.11
         LicenseInfo: MIT
-  ECRRepository: 
-    Type: AWS::ECR::Repository
-    Properties: 
-      RepositoryName: "lambda_input_validation"
-
-  InputValidationFunction:
-    Type: AWS::Lambda::Function
-    DependsOn: 
-      - StartCodeBuildProject
-    Properties:
-      PackageType: Image
-      Role:
-        Fn::GetAtt:
-        - LambdaRole
-        - Arn
-      Code:
-        ImageUri: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}:latest"
-      Architectures:
-        - x86_64
-      MemorySize: 2048
-      Timeout: 500
-      Environment:
-        Variables:
-          stage_folder_name: !Ref pStageFolder
-          source_folder_name: !Ref pSourceFolder
-          schema: !Ref pDatasetSchema
 
 Outputs:
   GlueDBOutput:

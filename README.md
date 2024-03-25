@@ -42,7 +42,7 @@ AWS Step Functions Limits Overview
 
 ## Product Versions
 * Python 3 for AWS Lambda
-* AWS Glue version 2
+* AWS Glue version 3
 
 ## Architecture
 
@@ -76,7 +76,6 @@ AWS Step Functions Limits Overview
     - start_codebuild.py - Start AWS CodeBuild Project
     - validation.py - Validates input raw dataset. 
     - s3object.py - Creates required directory structure inside S3 bucket
-    - notification.py - Sends Success or Error notification at the end of Pipeline.
 
 ## Deploy
 This pattern can be deployed through AWS CloudFormation template.
@@ -88,6 +87,7 @@ Follow the below step to deploy this pattern using CloudFormation template file 
 3.	Update parameter.json file as follows - 
     - pS3BucketName - Unique bucket name. This bucket will be created to store all the dataset. As, S3 Bucket name is globally unique, provide a unique name.
     - pEmailforNotification - A valid email address to receive success/error notification.
+    - pPrefix - A prefix string that will be used in the AWS Glue crawler name
     - pSourceFolder - Folder name (inside bucket created mentioned in 3.a) where source csv file will be uploaded inside 
     - pStageFolder - Folder name (inside bucket created mentioned in 3.a) used to staging area for AWS Glue Jobs 
     - pTransformFolder - Folder name (inside bucket created mentioned in 3.a) where transformed and portioned dataset will be stored 
@@ -98,8 +98,8 @@ Follow the below step to deploy this pattern using CloudFormation template file 
 
 4. Execute the following AWS CLI command with pre-configured AWS CLI profile. 
     - Replace "Profile_Name" with a valid aws cli profile name
-    - Replace "Stack_Name" with Proide a unique stack name
-    - Replace "existing_bucket_name_in_the_same_region" with an existing S3 bcuket name in the same region where the stack will be deployed
+    - Replace "Stack_Name" with a unique stack name
+    - Replace "existing_bucket_name_in_the_same_region" with an existing S3 bucket name in the same region where the stack will be deployed
 
     *aws cloudformation package --template-file template.yml --s3-bucket <**existing_bucket_name_in_the_same_region**> --output-template-file packaged.template --profile <**Profile_Name**>*
 

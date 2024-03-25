@@ -129,16 +129,17 @@ Resources:
   BasicManagedPolicyforCodeBuild: 
     Type: "AWS::IAM::ManagedPolicy"
     Properties:
-      Description: "THis is sample CFN template"
+      Description: "This is sample CFN template"
       PolicyDocument: 
         Version: "2012-10-17"
         Statement: 
           - Sid: "ecraccess"
             Effect: "Allow"
             Action: 
-              -  "ecr:*"
-            Resource: "*"
-           
+              -  "lambda:Publish*"
+              -  "lambda:List*"
+            Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:${AWS::StackName}-layer-cerberus"
+
           - Sid: "logaccess"
             Effect: "Allow"
             Action: 
@@ -146,6 +147,13 @@ Resources:
               -  logs:CreateLogStream
               -  logs:PutLogEvents
             Resource: "*"
+
+          - Sid: "SSMPutparamater"
+            Effect: "Allow"
+            Action:
+              - ssm:PutParameter
+            Resource: 
+              - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${LambdaLayerParameter}"
 
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
@@ -158,101 +166,20 @@ Resources:
           phases:
             build:
               commands:
-                - echo "pandas==1.5.1" >> requirements.txt
-                - echo "s3fs" >> requirements.txt
-                - echo "pytz" >> requirements.txt
-                - echo "cerberus" >> requirements.txt
-                - |
-                  cat > validation.py << EOF
-                  import json
-                  import pandas as pd
-                  from cerberus import Validator
-                  from datetime import datetime
-                  import boto3
-                  import os
-                              
-                          
-                  def lambda_handler(event, context):
-                      
-                      ''' 
-                      This function validates input raw dataset against schema specified in the env variable
-                      '''
-                      print("Starting Input Validation")
-                      print(event)
-                      result = {}
-                      s3_resource = boto3.resource('s3')
-                      #to_date = lambda s: datetime.strptime(s, os.environ['dateformat'])
-                      bucket_name = event['bucket_name']
-                      key_name = event['key_name']
-                      source_file_name = event['file_name']
-                      #source_file_name_to_copy = bucket_name + "/" + key_name
-                      #error_file_name="error/" + source_file_name
-
-                      schema = {}
-                      schema = json.loads(os.environ['schema'])   
-
-                      for keys in schema:
-                          if 'format' in schema[keys]:
-                              date_format_provided = schema[keys]['format']
-                              to_date = lambda s: datetime.strptime(s, date_format_provided)
-                              schema[keys].pop("format")
-                              schema[keys]['coerce'] = to_date
-                      
-                      v = Validator(schema)
-                      v.allow_unknown = False
-                      v.require_all = True
-                      source_file_path = "s3://" + bucket_name + "/" + key_name
-                      try:
-                          df = pd.read_csv(source_file_path)
-                          print("Successfuly read : " + source_file_path)
-                      except:
-                          result['Validation'] = "FAILURE"
-                          result['Reason'] = "Errro while reading csv"
-                          result['Location'] = os.environ['source_folder_name']
-                          print("Error while reading csv")
-                          return(result)      
-                      result['Validation'] = "SUCCESS"
-                      result['Location'] = os.environ['source_folder_name']
-                      df_dict = df.to_dict(orient='records')
-                      transformed_file_name = "s3://" + bucket_name + "/" + str(os.environ['stage_folder_name']) + "/" + source_file_name
-
-                      if len(df_dict) == 0:
-                          result['Validation'] = "FAILURE"
-                          result['Reason'] = "NO RECORD FOUND"
-                          result['Location'] = os.environ['source_folder_name']
-                          print("Moving file to error folder")
-                          return(result)
-                      for idx, record in enumerate(df_dict):
-                          if not v.validate(record):
-                              result['Validation'] = "FAILURE"
-                              result['Reason'] = str(v.errors) + " in record number " + str(idx)
-                              result['Location'] = os.environ['source_folder_name']
-                              print("Moving file to error folder")
-                              return(result)
-                              break
-
-                      df['Month'] = df['Date'].astype(str).str[0:2]
-                      df['Day'] = df['Date'].astype(str).str[3:5]
-                      df['Year'] = df['Date'].astype(str).str[6:10]
-                      df.to_csv(transformed_file_name, index=False)
-                      s3_resource.Object(bucket_name, key_name).delete()
-                      print("Successfuly moved file to  : " + transformed_file_name)
-                      return(result)
-                  EOF
-                - |
-                  cat > Dockerfile << EOF
-                  FROM public.ecr.aws/lambda/python:3.8
-                  COPY requirements.txt  .
-                  RUN  pip3 install -r requirements.txt --target /var/task
-                  COPY validation.py /var/task
-                  CMD [ "validation.lambda_handler" ] 
-                  EOF
-                - cat Dockerfile
-                - aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${Account}.dkr.ecr.${AWS_REGION}.amazonaws.com
-                - docker build -t etl . 
-                - docker tag etl:latest ${ECRreponame}:latest
-                - docker push ${ECRreponame}:latest
-
+                - mkdir -p build/python
+                - echo "s3fs==2024.3.1" >> requirements.txt
+                - echo "pytz==2024.1" >> requirements.txt
+                - echo "cerberus==1.3.5" >> requirements.txt
+                - pip install -r requirements.txt -t ./build/python
+                - cd ./build && zip -r ../temp.zip .
+                - pwd
+                - ls -l
+                - ls -lrt
+                - cd ..
+                - ls -l
+                - out=$(aws lambda publish-layer-version --layer-name ${LayerName}-cerberus --zip-file fileb://temp.zip --compatible-runtimes python3.9 python3.10 python3.11| jq .LayerVersionArn |tr -d "\"")
+                - aws ssm put-parameter  --name ${SSMParameterName} --value ${out} --type "String" --overwrite
+              
       ServiceRole:
         Fn::GetAtt: [ CodeBuildRole, Arn ]
       Artifacts:
@@ -265,16 +192,10 @@ Resources:
         EnvironmentVariables:
           - Name: ECRreponame
             Type: PLAINTEXT
-            Value:
-              Fn::GetAtt:
-                - ECRRepository
-                - RepositoryUri
-          - Name: Region
-            Value: !Sub "${AWS::Region}"
-          - Name: Account
-            Value: !Ref AWS::AccountId
-          - Name: s3bucket
-            Value: !Ref pS3BucketName
+            Value: !Sub "${AWS::StackName}-layer"
+          - Name: SSMParameterName
+            Type: PLAINTEXT
+            Value: !Ref LambdaLayerParameter
       TimeoutInMinutes: 30
 
   BasicLambdaRole: 
@@ -296,7 +217,7 @@ Resources:
   BasicManagedPolicyforlambda: 
     Type: "AWS::IAM::ManagedPolicy"
     Properties:
-      Description: "THis is sample CFN template"
+      Description: "This is sample CFN template"
       PolicyDocument: 
         Version: "2012-10-17"
         Statement: 
@@ -353,7 +274,7 @@ Resources:
   ManagedPolicyforstepfunction: 
     Type: "AWS::IAM::ManagedPolicy"
     Properties:
-      Description: "THis is sample CFN template"
+      Description: "This is sample CFN template"
       PolicyDocument: 
         Version: "2012-10-17"
         Statement: 
@@ -363,7 +284,6 @@ Resources:
             Resource: 
               - !GetAtt  ArchiveFunction.Arn
               - !GetAtt  StartCrawlerFunction.Arn
-              - !GetAtt  NotificationFunction.Arn
               - !GetAtt  CrawlerStatusCheckFunction.Arn
               - !GetAtt  InputValidationFunction.Arn
 
@@ -384,11 +304,15 @@ Resources:
               -  "xray:GetSamplingRules"
               -  "xray:GetSamplingTargets"
             Resource: "*"
-
+          - Sid: snsaccess
+            Effect: Allow
+            Action:
+              - sns:*
+            Resource: '*'
   ManagedPolicyforlambda: 
     Type: "AWS::IAM::ManagedPolicy"
     Properties:
-      Description: "THis is sample CFN template"
+      Description: "This is sample CFN template"
       PolicyDocument: 
         Version: "2012-10-17"
         Statement: 
@@ -425,8 +349,8 @@ Resources:
             Action: "glue:*"
             Resource: 
                 - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${GlueDB}"
-                - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:crawler/${CrawlPartitionedFile}"
-                - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:crawler/${CrawlRawFile}"
+                - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:crawler/${AWS::StackName}_CrawlPartitionedFile_${pPrefix}"
+                - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:crawler/${AWS::StackName}_CrawlRawFile_${pPrefix}"
                 - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${GlueDB}/*"
                 - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog"
 
@@ -475,7 +399,7 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: move_file.lambda_handler
       CodeUri: lambda
-      Runtime: python3.9
+      Runtime: python3.11
       Timeout: 30
       Environment:
         Variables:
@@ -488,7 +412,7 @@ Resources:
       Role: !GetAtt BasicLambdaRole.Arn
       Handler: start_step_function.lambda_handler
       CodeUri: lambda
-      Runtime: python3.9
+      Runtime: python3.11
       Timeout: 60
       Environment:
         Variables:
@@ -500,20 +424,8 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: start_crawler.lambda_handler
       CodeUri: lambda
-      Runtime: python3.9
+      Runtime: python3.11
       Timeout: 60
-
-  NotificationFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Role: !GetAtt LambdaRole.Arn
-      Handler: notification.lambda_handler
-      CodeUri: lambda
-      Runtime: python3.9
-      Timeout: 30
-      Environment:
-        Variables:
-          SNS_TOPIC: !Ref SNSTopic
 
   CrawlerStatusCheckFunction:
     Type: AWS::Serverless::Function
@@ -521,31 +433,31 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: check_crawler.lambda_handler
       CodeUri: lambda
-      Runtime: python3.9
+      Runtime: python3.11
       Timeout: 30
       Environment:
         Variables:
           RETRYLIMIT: 200
         
-  # InputValidationFunction:
-  #   Type: AWS::Serverless::Function
-  #   DependsOn:
-  #     - "StartCodeBuildProject"
-  #   Properties:
-  #     Layers: 
-  #       - !GetAtt LambdaLayerParameter.Value
-  #       # - !GetAtt LambdaLayerParameter1.Value
+  InputValidationFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - "StartCodeBuildProject"
+    Properties:
+      Layers: 
+        - !GetAtt LambdaLayerParameter.Value
+        - "arn:aws:lambda:us-east-1:336392948345:layer:AWSSDKPandas-Python311:10"
 
-  #     Role: !GetAtt LambdaRole.Arn
-  #     Handler: validation.lambda_handler
-  #     CodeUri: lambda
-  #     Runtime: python3.9
-  #     Timeout: 500
-  #     Environment:
-  #       Variables:
-  #         stage_folder_name: !Ref pStageFolder
-  #         source_folder_name: !Ref pSourceFolder
-  #         schema: !Ref pDatasetSchema
+      Role: !GetAtt LambdaRole.Arn
+      Handler: validation.lambda_handler
+      CodeUri: lambda
+      Runtime: python3.11
+      Timeout: 500
+      Environment:
+        Variables:
+          stage_folder_name: !Ref pStageFolder
+          source_folder_name: !Ref pSourceFolder
+          schema: !Ref pDatasetSchema
 
   StartCodeBuildProjectFunction:
     Type: AWS::Serverless::Function
@@ -556,7 +468,7 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: start_codebuild.lambda_handler
       CodeUri: lambda
-      Runtime: python3.9
+      Runtime: python3.11
       Timeout: 500
       Environment:
         Variables:
@@ -643,27 +555,25 @@ Resources:
                     "Next": "Error Notification",
                     "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${ArchiveFunction}"
                 },
-
                 "Error Notification": {
-                      "Type": "Task",
-                      "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${NotificationFunction}",
-                      "Parameters": {
-                        "executionname.$": "$$.Execution.Name",
-                        "msg.$": "$.msg",
-                        "status.$": "$.Status"
-                      },
-                      "Next": "Fail"
+                    "Type": "Task",
+                    "Resource": "arn:aws:states:::aws-sdk:sns:publish",
+                    "Parameters": {
+                           "Message.$": "$",
+                           "TopicArn": "${SNSTopic}"
+                    },
+                    "Next": "Fail"
                 },
                 "Start Crawler For Raw File": {
                     "Type": "Task",
                     "ResultPath": "$.taskresult",
                     "ResultSelector": {
                         "cnt": "0",
-                        "crawler_name": "${CrawlRawFile}"
+                        "crawler_name": "${AWS::StackName}_CrawlRawFile_${pPrefix}"
                     },
                     "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StartCrawlerFunction}",
                     "Parameters": {
-                        "Crawler_Name": "${CrawlRawFile}"
+                        "Crawler_Name": "${AWS::StackName}_CrawlRawFile_${pPrefix}"
                     },
                     "Retry": [
                         {
@@ -764,11 +674,11 @@ Resources:
                     "ResultPath": "$.taskresult",
                     "ResultSelector": {
                         "cnt": "0",
-                        "crawler_name": "${CrawlPartitionedFile}"
+                        "crawler_name": "${AWS::StackName}_CrawlPartitionedFile_${pPrefix}"
                     },
                     "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${StartCrawlerFunction}",
                     "Parameters": {
-                        "Crawler_Name": "${CrawlPartitionedFile}"
+                        "Crawler_Name": "${AWS::StackName}_CrawlPartitionedFile_${pPrefix}"
                     },
                     "Retry": [
                         {
@@ -857,11 +767,10 @@ Resources:
                 },
                 "Success Notification": {
                     "Type": "Task",
-                    "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${NotificationFunction}",
+                    "Resource": "arn:aws:states:::aws-sdk:sns:publish",
                     "Parameters": {
-                      "executionname.$": "$$.Execution.Name",
-                      "msg.$": "$.msg",
-                      "status.$": "$.Status"
+                           "Message.$": "$",
+                           "TopicArn": "${SNSTopic}"
                     },
                     "End": true
                 }
@@ -874,15 +783,22 @@ Resources:
       Command:
         Name: glueetl
         ScriptLocation: !Sub "s3://${pS3BucketName}/glue/gluejob.py"
+      DefaultArguments:
+        "--enable-auto-scaling": "true"
+        "--job-bookmark-option": "job-bookmark-enable"
       ExecutionProperty:
         MaxConcurrentRuns: 20
       MaxRetries: 0
       Role: !Ref GlueRole
-      GlueVersion: "2.0"
+      GlueVersion: "3.0"
+      NumberOfWorkers: 100
+      WorkerType: G.1X
 
   CrawlRawFile:
     Type: "AWS::Glue::Crawler"
+    DependsOn: S3Bucket
     Properties:
+      Name: !Sub ${AWS::StackName}_CrawlRawFile_${pPrefix}
       Role: !Ref GlueRole
       Description: "Crawler to generate the schema of the raw file"
       SchemaChangePolicy:
@@ -896,8 +812,10 @@ Resources:
   
   CrawlPartitionedFile:
     Type: "AWS::Glue::Crawler"
+    DependsOn: S3Bucket
     Properties:
       Role: !Ref GlueRole
+      Name: !Sub ${AWS::StackName}_CrawlPartitionedFile_${pPrefix}
       Description: "Crawler to generate the schema of the partitioned file"
       SchemaChangePolicy:
         UpdateBehavior: "UPDATE_IN_DATABASE"
@@ -915,7 +833,8 @@ Resources:
         ContentUri: ./myLayer
         CompatibleRuntimes:
           - python3.9
-          - python3.8
+          - python3.10
+          - python3.11
         LicenseInfo: MIT
   ECRRepository: 
     Type: AWS::ECR::Repository

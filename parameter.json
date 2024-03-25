@@ -1,7 +1,7 @@
 [
   {
     "ParameterKey": "pS3BucketName",
-    "ParameterValue": "etl-pattern-fix-2022-1"
+    "ParameterValue": "unique-bucket-name-dummy-2024"
   },
   {
     "ParameterKey": "pSourceFolder",
@@ -26,6 +26,10 @@
   {
     "ParameterKey": "pEmailforNotification",
     "ParameterValue": "valid-email@xyz.com"
+  },
+  {
+    "ParameterKey": "pPrefix",
+    "ParameterValue": "demo"
   },
   {
     "ParameterKey": "pDatasetSchema",

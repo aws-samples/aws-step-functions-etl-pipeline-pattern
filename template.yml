@@ -51,7 +51,7 @@ Resources:
   LambdaLayerParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: !Sub ${AWS::StackName}_lambda_layer
+      Name: !Sub ${AWS::StackName}_lambda_layer_cerberus
       Type: String
       Value: "NA"
 
@@ -104,7 +104,7 @@ Resources:
        CodeUri: lambda
        Role: !GetAtt LambdaRole.Arn
        Timeout: 360
-       Runtime: python3.9
+       Runtime: python3.11
    
   SNSTopic:
     Type: AWS::SNS::Topic
@@ -141,7 +141,7 @@ Resources:
             Action: 
               -  "lambda:Publish*"
               -  "lambda:List*"
-            Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:${AWS::StackName}-pandas-layer"
+            Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:layer:${AWS::StackName}-layer-cerberus"
 
           - Sid: "logaccess"
             Effect: "Allow"
@@ -155,7 +155,8 @@ Resources:
             Effect: "Allow"
             Action:
               - ssm:PutParameter
-            Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${LambdaLayerParameter}"
+            Resource: 
+              - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${LambdaLayerParameter}"
 
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
@@ -169,11 +170,9 @@ Resources:
             build:
               commands:
                 - mkdir -p build/python
-                - echo "pandas==1.2.3" > requirements.txt
-                - echo "numpy==1.20.2" >> requirements.txt
-                - echo "s3fs==2022.10.0" >> requirements.txt
-                - echo "pytz==2022.5" >> requirements.txt
-                - echo "cerberus==1.3.4" >> requirements.txt
+                - echo "s3fs==2024.3.1" >> requirements.txt
+                - echo "pytz==2024.1" >> requirements.txt
+                - echo "cerberus==1.3.5" >> requirements.txt
                 - pip install -r requirements.txt -t ./build/python
                 - cd ./build && zip -r ../temp.zip .
                 - pwd
@@ -181,25 +180,24 @@ Resources:
                 - ls -lrt
                 - cd ..
                 - ls -l
-                - out=$(aws lambda publish-layer-version --layer-name ${LayerName} --zip-file fileb://temp.zip --compatible-runtimes python3.7 python3.8| jq .LayerVersionArn |tr -d "\"")
+                - out=$(aws lambda publish-layer-version --layer-name ${LayerName}-cerberus --zip-file fileb://temp.zip --compatible-runtimes python3.9 python3.10 python3.11| jq .LayerVersionArn |tr -d "\"")
                 - aws ssm put-parameter  --name ${SSMParameterName} --value ${out} --type "String" --overwrite
-
+              
       ServiceRole:
         Fn::GetAtt: [ CodeBuildRole, Arn ]
       Artifacts:
         Type: NO_ARTIFACTS
       Environment:
         Type: LINUX_CONTAINER
-        ComputeType: BUILD_GENERAL1_SMALL
+        ComputeType: BUILD_GENERAL1_MEDIUM
         Image: aws/codebuild/standard:3.0
         EnvironmentVariables:
           - Name: LayerName
             Type: PLAINTEXT
-            Value: !Sub "${AWS::StackName}-pandas-layer"
+            Value: !Sub "${AWS::StackName}-layer"
           - Name: SSMParameterName
             Type: PLAINTEXT
             Value: !Ref LambdaLayerParameter
-
       TimeoutInMinutes: 30
 
 
@@ -404,7 +402,7 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: move_file.lambda_handler
       CodeUri: lambda
-      Runtime: python3.9
+      Runtime: python3.11
       Timeout: 30
       Environment:
         Variables:
@@ -417,7 +415,7 @@ Resources:
       Role: !GetAtt BasicLambdaRole.Arn
       Handler: start_step_function.lambda_handler
       CodeUri: lambda
-      Runtime: python3.9
+      Runtime: python3.11
       Timeout: 60
       Environment:
         Variables:
@@ -429,7 +427,7 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: start_crawler.lambda_handler
       CodeUri: lambda
-      Runtime: python3.9
+      Runtime: python3.11
       Timeout: 60
 
   CrawlerStatusCheckFunction:
@@ -438,7 +436,7 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: check_crawler.lambda_handler
       CodeUri: lambda
-      Runtime: python3.9
+      Runtime: python3.11
       Timeout: 30
       Environment:
         Variables:
@@ -451,10 +449,12 @@ Resources:
     Properties:
       Layers: 
         - !GetAtt LambdaLayerParameter.Value
+        - "arn:aws:lambda:us-east-1:336392948345:layer:AWSSDKPandas-Python311:10"
+
       Role: !GetAtt LambdaRole.Arn
       Handler: validation.lambda_handler
       CodeUri: lambda
-      Runtime: python3.8
+      Runtime: python3.11
       Timeout: 500
       Environment:
         Variables:
@@ -471,7 +471,7 @@ Resources:
       Role: !GetAtt LambdaRole.Arn
       Handler: start_codebuild.lambda_handler
       CodeUri: lambda
-      Runtime: python3.9
+      Runtime: python3.11
       Timeout: 500
       Environment:
         Variables:
@@ -836,8 +836,8 @@ Resources:
         ContentUri: ./myLayer
         CompatibleRuntimes:
           - python3.9
-          - python3.8
-          - python3.7
+          - python3.10
+          - python3.11
         LicenseInfo: MIT
 
 Outputs:

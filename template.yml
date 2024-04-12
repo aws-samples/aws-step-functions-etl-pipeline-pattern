@@ -359,6 +359,7 @@ Resources:
               - "glue:CreatePartition"
               - "glue:DeletePartition"
               - "glue:GetCrawlers"
+              - "glue:GetCrawler"
               - "glue:StartCrawler"
               - "glue:ListCrawlers"
               - "glue:UpdateCrawler"

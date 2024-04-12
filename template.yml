@@ -101,6 +101,7 @@ Resources:
          - !Ref LambdaLayer
        Description: "Work with S3 Buckets!"
        Handler: s3object.handler
+       ReservedConcurrentExecutions: 10
        CodeUri: lambda
        Role: !GetAtt LambdaRole.Arn
        Timeout: 360
@@ -349,7 +350,20 @@ Resources:
             Resource: !Ref  SNSTopic
           - Sid: "glue"
             Effect: "Allow"
-            Action: "glue:*"
+            Action: 
+              - "glue:GetDatabase"
+              - "glue:CreateDatabase"
+              - "glue:CreateTable"
+              - "glue:GetTable"
+              - "glue:GetPartitions"
+              - "glue:CreatePartition"
+              - "glue:DeletePartition"
+              - "glue:GetCrawlers"
+              - "glue:GetCrawler"
+              - "glue:StartCrawler"
+              - "glue:ListCrawlers"
+              - "glue:UpdateCrawler"
+              - "glue:CreateCrawler"
             Resource: 
                 - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${GlueDB}"
                 - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:crawler/${AWS::StackName}_CrawlPartitionedFile_${pPrefix}"
@@ -401,6 +415,7 @@ Resources:
     Properties:
       Role: !GetAtt LambdaRole.Arn
       Handler: move_file.lambda_handler
+      ReservedConcurrentExecutions: 10
       CodeUri: lambda
       Runtime: python3.11
       Timeout: 30
@@ -414,6 +429,7 @@ Resources:
     Properties:
       Role: !GetAtt BasicLambdaRole.Arn
       Handler: start_step_function.lambda_handler
+      ReservedConcurrentExecutions: 10
       CodeUri: lambda
       Runtime: python3.11
       Timeout: 60
@@ -426,6 +442,7 @@ Resources:
     Properties:
       Role: !GetAtt LambdaRole.Arn
       Handler: start_crawler.lambda_handler
+      ReservedConcurrentExecutions: 10
       CodeUri: lambda
       Runtime: python3.11
       Timeout: 60
@@ -435,6 +452,7 @@ Resources:
     Properties:
       Role: !GetAtt LambdaRole.Arn
       Handler: check_crawler.lambda_handler
+      ReservedConcurrentExecutions: 10
       CodeUri: lambda
       Runtime: python3.11
       Timeout: 30
@@ -453,6 +471,7 @@ Resources:
 
       Role: !GetAtt LambdaRole.Arn
       Handler: validation.lambda_handler
+      ReservedConcurrentExecutions: 10
       CodeUri: lambda
       Runtime: python3.11
       Timeout: 500
@@ -470,6 +489,7 @@ Resources:
          - !Ref LambdaLayer
       Role: !GetAtt LambdaRole.Arn
       Handler: start_codebuild.lambda_handler
+      ReservedConcurrentExecutions: 10
       CodeUri: lambda
       Runtime: python3.11
       Timeout: 500
@@ -510,7 +530,21 @@ Resources:
                 Resource: !Sub "arn:aws:s3:::${pS3BucketName}/*"
               - Sid: "glue"
                 Effect: "Allow"
-                Action: "glue:*"
+                Action: 
+                  - "glue:GetDatabase"
+                  - "glue:CreateDatabase"
+                  - "glue:CreateTable"
+                  - "glue:GetTable"
+                  - "glue:UpdateTable"
+                  - "glue:GetPartitions"
+                  - "glue:CreatePartition"
+                  - "glue:DeletePartition"
+                  - "glue:CreatePartitionIndex"
+                  - "glue:DeletePartitionIndex"
+                  - "glue:BatchCreatePartition"
+                  - "glue:BatchDeletePartition"
+                  - "glue:BatchGetPartition"
+                  - "glue:GetPartitionIndexes"
                 Resource: 
                     - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${GlueDB}"
                     - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${GlueDB}/*"

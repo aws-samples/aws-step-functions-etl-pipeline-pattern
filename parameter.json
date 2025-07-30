@@ -1,7 +1,7 @@
 [
   {
     "ParameterKey": "pS3BucketName",
-    "ParameterValue": "unique-bucket-name-dummy-2024"
+    "ParameterValue": "unique-bucket-name-dummy-2025"
   },
   {
     "ParameterKey": "pSourceFolder",
@@ -25,7 +25,7 @@
   },
   {
     "ParameterKey": "pEmailforNotification",
-    "ParameterValue": "valid-email@xyz.com"
+    "ParameterValue": "gangapad@amazon.com"
   },
   {
     "ParameterKey": "pPrefix",

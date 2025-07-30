@@ -105,7 +105,7 @@ Resources:
        CodeUri: lambda
        Role: !GetAtt LambdaRole.Arn
        Timeout: 360
-       Runtime: python3.11
+       Runtime: python3.13
    
   SNSTopic:
     Type: AWS::SNS::Topic
@@ -181,7 +181,7 @@ Resources:
                 - ls -lrt
                 - cd ..
                 - ls -l
-                - out=$(aws lambda publish-layer-version --layer-name ${LayerName}-cerberus --zip-file fileb://temp.zip --compatible-runtimes python3.9 python3.10 python3.11| jq .LayerVersionArn |tr -d "\"")
+                - out=$(aws lambda publish-layer-version --layer-name ${LayerName}-cerberus --zip-file fileb://temp.zip --compatible-runtimes python3.11 python3.12 python3.13| jq .LayerVersionArn |tr -d "\"")
                 - aws ssm put-parameter  --name ${SSMParameterName} --value ${out} --type "String" --overwrite
               
       ServiceRole:
@@ -191,7 +191,7 @@ Resources:
       Environment:
         Type: LINUX_CONTAINER
         ComputeType: BUILD_GENERAL1_MEDIUM
-        Image: aws/codebuild/standard:3.0
+        Image: aws/codebuild/standard:7.0
         EnvironmentVariables:
           - Name: LayerName
             Type: PLAINTEXT
@@ -417,7 +417,7 @@ Resources:
       Handler: move_file.lambda_handler
       ReservedConcurrentExecutions: 10
       CodeUri: lambda
-      Runtime: python3.11
+      Runtime: python3.13
       Timeout: 30
       Environment:
         Variables:
@@ -431,7 +431,7 @@ Resources:
       Handler: start_step_function.lambda_handler
       ReservedConcurrentExecutions: 10
       CodeUri: lambda
-      Runtime: python3.11
+      Runtime: python3.13
       Timeout: 60
       Environment:
         Variables:
@@ -444,7 +444,7 @@ Resources:
       Handler: start_crawler.lambda_handler
       ReservedConcurrentExecutions: 10
       CodeUri: lambda
-      Runtime: python3.11
+      Runtime: python3.13
       Timeout: 60
 
   CrawlerStatusCheckFunction:
@@ -454,7 +454,7 @@ Resources:
       Handler: check_crawler.lambda_handler
       ReservedConcurrentExecutions: 10
       CodeUri: lambda
-      Runtime: python3.11
+      Runtime: python3.13
       Timeout: 30
       Environment:
         Variables:
@@ -467,13 +467,13 @@ Resources:
     Properties:
       Layers: 
         - !GetAtt LambdaLayerParameter.Value
-        - !Sub "arn:aws:lambda:${AWS::Region}:336392948345:layer:AWSSDKPandas-Python311:10"
+        - !Sub "arn:aws:lambda:${AWS::Region}:336392948345:layer:AWSSDKPandas-Python313:1"
 
       Role: !GetAtt LambdaRole.Arn
       Handler: validation.lambda_handler
       ReservedConcurrentExecutions: 10
       CodeUri: lambda
-      Runtime: python3.11
+      Runtime: python3.13
       Timeout: 500
       Environment:
         Variables:
@@ -491,7 +491,7 @@ Resources:
       Handler: start_codebuild.lambda_handler
       ReservedConcurrentExecutions: 10
       CodeUri: lambda
-      Runtime: python3.11
+      Runtime: python3.13
       Timeout: 500
       Environment:
         Variables:
@@ -538,6 +538,7 @@ Resources:
                   - "glue:UpdateTable"
                   - "glue:GetPartitions"
                   - "glue:CreatePartition"
+                  - "glue:UpdatePartition"
                   - "glue:DeletePartition"
                   - "glue:CreatePartitionIndex"
                   - "glue:DeletePartitionIndex"
@@ -827,7 +828,7 @@ Resources:
         MaxConcurrentRuns: 20
       MaxRetries: 0
       Role: !Ref GlueRole
-      GlueVersion: "3.0"
+      GlueVersion: "4.0"
       NumberOfWorkers: 100
       WorkerType: G.1X
 
@@ -869,9 +870,9 @@ Resources:
         Description: My layer
         ContentUri: ./myLayer
         CompatibleRuntimes:
-          - python3.9
-          - python3.10
           - python3.11
+          - python3.12
+          - python3.13
         LicenseInfo: MIT
 
 Outputs:

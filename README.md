@@ -41,8 +41,9 @@ For more details refer:
 AWS Step Functions Limits Overview
 
 ## Product Versions
-* Python 3 for AWS Lambda
-* AWS Glue version 3
+* Python 3.13 for AWS Lambda
+* AWS Glue version 4.0
+* AWS CodeBuild Standard 7.0
 
 ## Architecture
 
